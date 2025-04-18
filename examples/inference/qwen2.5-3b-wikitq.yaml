@@ -1,0 +1,4 @@
+model_name_or_path: /mnt/usercache/mengjinxiang/Project/TinyZero/checkpoints/TinyZero/wikitq-sft-ppo-qwen2.5-3b-instruct/actor/global_step_700 #/mnt/usercache/mengjinxiang/Project/TinyZero/checkpoints/TinyZero/wikitq-qwen2.5-3b-instruct/actor/global_step_600 #/mnt/usercache/huggingface/Qwen2.5-3B
+template: qwen
+infer_backend: vllm  # choices: [huggingface, vllm]
+trust_remote_code: true
