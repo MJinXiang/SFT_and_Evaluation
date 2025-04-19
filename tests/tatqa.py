@@ -3,6 +3,7 @@ import os
 import logging
 import time
 import random
+import argparse
 import sys
 import re
 from datetime import datetime
@@ -108,7 +109,7 @@ def find_gold_answer_with_info(test_data, question_text, table_uid):
         "mappings": []
     }
 
-def process_tatqa_data(input_file, gold_file, output_file, model_name, log_file, max_tokens=2048, start_from=0):
+def process_tatqa_data(input_file, gold_file, output_file, model_name, log_file, max_tokens=2048, start_from=0, api_port=8000, temperature=0.7):
     """Process TaTQA dataset"""
     logger = setup_logger(log_file)
     
@@ -123,7 +124,7 @@ def process_tatqa_data(input_file, gold_file, output_file, model_name, log_file,
     
     # Initialize model client
     try:
-        client_info = initialize_client({"model_path": model_name})
+        client_info = initialize_client({"model_path": model_name, "api_port": api_port})
         logger.info(f"Model client initialized successfully, type: {client_info['model_type']}")
     except Exception as e:
         logger.error(f"Model client initialization failed: {e}")
@@ -232,7 +233,7 @@ def process_tatqa_data(input_file, gold_file, output_file, model_name, log_file,
                 client_info=client_info,
                 messages=messages,
                 max_tokens=max_tokens,
-                temperature=0.7,
+                temperature=temperature,
                 top_p=0.8,
                 max_retries=10
             )
@@ -370,18 +371,29 @@ def process_tatqa_data(input_file, gold_file, output_file, model_name, log_file,
         logger.info(f"Success rate: {success_count/len(expanded_items)*100:.2f}%")
     logger.info("=" * 60)
 
-def main():
-    # Detect correct root path
-    base_paths = [
-        "/mnt/usercache/mengjinxiang/Project/LLaMA-Factory-main",
-        # "/netcache/mengjinxiang/Project/LLaMA-Factory-main",
-    ]
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Process TaTQA dataset with LLM')
     
-    base_path = None
-    for path in base_paths:
-        if os.path.exists(path):
-            base_path = path
-            break
+    parser.add_argument('--api_port', type=int, default=8000, help='API port for local model server')
+    parser.add_argument('--output_file', type=str, help='Path to save results')
+    parser.add_argument('--model_path', type=str, help='Model path or identifier')
+    parser.add_argument('--data_path', type=str, help='Path to input data file')
+    parser.add_argument('--gold_file', type=str, help='Path to gold answer file')
+    parser.add_argument('--log_file', type=str, help='Path to log file')
+    parser.add_argument('--temperature', type=float, default=0.7, help='Temperature for model generation')
+    parser.add_argument('--max_tokens', type=int, default=3096, help='Maximum tokens for model output')
+    parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
+    parser.add_argument('--base_path', type=str, help='Base path for the project')
+    
+    return parser.parse_args()
+
+def main():
+  
+    args = parse_arguments()
+    
+    if args.base_path and os.path.exists(args.base_path):
+        base_path = args.base_path
     
     if not base_path:
         print("Error: Unable to find project root directory")
@@ -389,23 +401,23 @@ def main():
     
     print(f"Using root path: {base_path}")
     
-    # Parameter settings
-    input_file = os.path.join(base_path, "data/tatqa/tatqa_dataset_test.json") #不用改动
-    gold_file = os.path.join(base_path, "data/tatqa/tatqa_dataset_test_gold.json") #不用改动
-    output_file = os.path.join(base_path, "results/tatqa/tatqa_sft_grpo_results.json")
-    model_name = "/mnt/usercache/mengjinxiang/Project/TinyZero/checkpoints/TinyZero/tatqa-sft-grpo-qwen2.5-3b-instruct/actor/global_step_600"  # Can use "deepseek-r1" or local model path claude-3-7-sonnet-20250219    /mnt/usercache/huggingface/Qwen2.5-3B-Instruct    /mnt/usercache/mengjinxiang/Project/TinyZero/checkpoints/TinyZero/tatqa-qwen2.5-3b-instruct/actor/global_step_600
-    log_file = os.path.join(base_path, "results/tatqa/logs/tatqa_sft_grpo_processing.log")
-    max_tokens = 3096  # Maximum output tokens
+    input_file = os.path.join(base_path, "data/tatqa/tatqa_dataset_test.json")
+    gold_file = os.path.join(base_path, "data/tatqa/tatqa_dataset_test_gold.json")
+    output_file = args.output_file
+
+    model_name = args.model_path
     
-    # Checkpoint parameter - start from which data item (0 means start from beginning)
-    start_from = 0
+    log_file = args.log_file 
     
-    # Ensure output directory and log directory exist
+    max_tokens = args.max_tokens
+    temperature = args.temperature
+    
+    start_from = args.start_from
+    
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
-    
-    # Process data
-    process_tatqa_data(input_file, gold_file, output_file, model_name, log_file, max_tokens, start_from)
+ 
+    process_tatqa_data(input_file, gold_file, output_file, model_name, log_file, max_tokens, start_from, api_port=args.api_port, temperature=temperature)
 
 if __name__ == "__main__":
     main()

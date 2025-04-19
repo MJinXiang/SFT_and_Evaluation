@@ -119,6 +119,7 @@ def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2,
 def initialize_client(model_info):
     """初始化并返回客户端信息"""
     model_path = model_info.get("model_path", "")
+    api_port = model_info.get("api_port", 8000)  # 获取API端口参数
     
     if (model_path.startswith("gemini") or 
         model_path.startswith("claude") or 
@@ -145,7 +146,7 @@ def initialize_client(model_info):
     
     else:
         try:
-            client = OpenAI(api_key="0", base_url="http://0.0.0.0:8000/v1") 
+            client = OpenAI(api_key="0", base_url=f"http://0.0.0.0:{api_port}/v1") 
             return {
                 "model_type": "openai",
                 "model_path": model_path,
