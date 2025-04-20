@@ -301,18 +301,33 @@ def evaluate_mmqa_results(input_file, output_file=None):
         print(traceback.format_exc())
         return 0, 0
 
+# def main():
+#     parser = argparse.ArgumentParser(description='评估MMQA任务的预测结果')
+#     parser.add_argument('--input', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/mmqa/mmqa2qa_3b_results.json',
+#                         help='包含预测结果和真实答案的输入文件路径')
+#     parser.add_argument('--output', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/baseline/eval/eval_results/mmqa2qa_3b_results.json',
+#                         help='评估结果输出文件路径')
+    
+#     args = parser.parse_args()
+    
+#     print(f"开始评估MMQA预测结果: {args.input}")
+#     evaluate_mmqa_results(args.input, args.output)
+#     print("评估完成！")
+
 def main():
-    parser = argparse.ArgumentParser(description='评估MMQA任务的预测结果')
-    parser.add_argument('--input', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/mmqa/mmqa2qa_3b_results.json',
-                        help='包含预测结果和真实答案的输入文件路径')
-    parser.add_argument('--output', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/baseline/eval/eval_results/mmqa2qa_3b_results.json',
-                        help='评估结果输出文件路径')
+    parser = argparse.ArgumentParser(description='Evaluate MMQA prediction results')
+    parser.add_argument('--results_file', type=str, required=True,
+                        help='Path to input file containing predictions and ground truth')
+    parser.add_argument('--output_file', type=str, required=True,
+                        help='Path to save evaluation results')
+    parser.add_argument('--base_path', type=str,
+                        help='Base path for the project (optional)')
     
     args = parser.parse_args()
     
-    print(f"开始评估MMQA预测结果: {args.input}")
-    evaluate_mmqa_results(args.input, args.output)
-    print("评估完成！")
+    print(f"Starting evaluation of MMQA predictions: {args.results_file}")
+    evaluate_mmqa_results(args.results_file, args.output_file)
+    print("Evaluation completed!")
 
 if __name__ == '__main__':
     main()

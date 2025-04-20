@@ -131,9 +131,9 @@ def evaluate_answers(input_file, output_file=None, verbose=True):
         results_list.append(result_item)
     
 
-    answered_samples = stats["answered_samples"]
+    answered_samples = stats['total_samples']
     if answered_samples > 0:
-        stats["exact_match_rate"] = stats["exact_matches"] / answered_samples
+        stats["exact_match_rate"] = stats["exact_matches"] / stats['total_samples']
     
 
     evaluation_result = {
@@ -159,25 +159,30 @@ def evaluate_answers(input_file, output_file=None, verbose=True):
         print(f"未提取到答案的样本数: {stats['no_answer_extracted']}")
         print(f"缺少真实答案的样本数: {stats['samples_with_missing_truth']}")
         print(f"精确匹配数: {stats['exact_matches']}")
-        print(f"精确匹配率(有答案的): {stats['exact_match_rate']:.4f}")
         print(f"精确匹配率(所有): {stats['exact_matches'] / stats['total_samples']:.4f}")
     
     return evaluation_result
 
+
 def main():
-    """主函数，处理命令行参数"""
-    parser = argparse.ArgumentParser(description="简化版WikiTQ预测结果评估")
-    parser.add_argument("--input", "-i", default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/wikitq/wikitq_sft_ppo_results.json', help="输入文件路径（包含预测结果的JSON文件）")
-    parser.add_argument("--output", "-o", default='eval_results/wikitq_sft_ppo_results.json', help="输出文件路径（评估结果将保存到此文件）")
-    parser.add_argument("--quiet", "-q", action="store_true", help="静默模式，不打印输出")
+    """Main function that handles command line arguments"""
+    parser = argparse.ArgumentParser(description="WikiTQ prediction evaluation")
+    
+    # Add parameters to match the script
+    parser.add_argument("--results_file", required=True, 
+                       help="Input file path with predictions (absolute path)")
+    parser.add_argument("--output_file", required=True,
+                       help="Output file path for evaluation results (absolute path)")
+    parser.add_argument("--base_path", type=str,
+                       help="Base path for the project (optional)")
     
     args = parser.parse_args()
     
-    # 运行评估
+    # Run evaluation
     result = evaluate_answers(
-        input_file=args.input, 
-        output_file=args.output, 
-        verbose=not args.quiet
+        input_file=args.results_file, 
+        output_file=args.output_file, 
+        verbose=True
     )
     
     if result is None:

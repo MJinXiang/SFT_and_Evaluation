@@ -8,6 +8,7 @@ import time
 import random
 import sys
 import re
+import argparse
 import string
 from datetime import datetime
 from llm import initialize_client, call_api_with_retry
@@ -135,7 +136,7 @@ def extract_answer_from_response(model_answer):
     # 如果没有任何标记，返回整个响应
     return model_answer.strip()
 
-def process_hybridqa_test_data(input_file, output_file, model_name, log_file, max_tokens=1024, temperature=0.0, start_from=0):
+def process_hybridqa_test_data(input_file, output_file, model_name, log_file, max_tokens=2048, temperature=0.0, start_from=0, api_port=8000):
     """处理HybridQA测试数据集，无需评估答案正确性"""
     logger = setup_logger(log_file)
     
@@ -146,11 +147,12 @@ def process_hybridqa_test_data(input_file, output_file, model_name, log_file, ma
     logger.info(f"Output file: {output_file}")
     logger.info(f"Using model: {model_name}")
     logger.info(f"Temperature: {temperature}")
+    logger.info(f"API port: {api_port}")
     logger.info(f"Starting from index: {start_from}")
     
     # 初始化模型客户端
     try:
-        client_info = initialize_client({"model_path": model_name})
+        client_info = initialize_client({"model_path": model_name, "api_port": api_port})
         model_type = client_info["model_type"]
         logger.info(f"Model client initialized successfully, type: {model_type}")
     except Exception as e:
@@ -331,42 +333,60 @@ def process_hybridqa_test_data(input_file, output_file, model_name, log_file, ma
     logger.info(f"Processing failures: {error_count}/{len(data_items)}")
     logger.info("=" * 60)
 
-def main():
-    # 检测正确的根路径
-    base_paths = [
-        "/mnt/usercache/mengjinxiang/Project/LLaMA-Factory-main",
-        # "/netcache/mengjinxiang/Project/LLaMA-Factory-main",
-    ]
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Process HybridQA dataset with LLM')
     
-    base_path = None
-    for path in base_paths:
-        if os.path.exists(path):
-            base_path = path
-            break
+    parser.add_argument('--api_port', type=int, default=8000, help='API port for local model server')
+    parser.add_argument('--output_file', type=str, help='Path to save results')
+    parser.add_argument('--model_path', type=str, help='Model path or identifier')
+    parser.add_argument('--log_file', type=str, help='Path to log file')
+    parser.add_argument('--temperature', type=float, default=0.6, help='Temperature for model generation')
+    parser.add_argument('--max_tokens', type=int, default=4096, help='Maximum tokens for model output')
+    parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
+    parser.add_argument('--base_path', type=str, help='Base path for the project')
+    
+    return parser.parse_args()
+
+def main():
+    # 解析命令行参数
+    args = parse_arguments()
+    
+    # 处理 base_path
+    if args.base_path and os.path.exists(args.base_path):
+        base_path = args.base_path
     
     if not base_path:
-        print("Error: Unable to find the project root directory")
+        print("Error: Unable to find project root directory")
         exit(1)
     
     print(f"Using root path: {base_path}")
     
-    # 参数设置
-    input_file = os.path.join(base_path, "data/hybridqa/test_top_1.json")  # 处理好的测试集
-    output_file = os.path.join(base_path, "results/hybridqa/hybridqa_sft_ppo_results.json")
-    model_name = "/mnt/usercache/mengjinxiang/Project/TinyZero/checkpoints/TinyZero/hybridqa-sft-ppo-qwen2.5-3b-instruct/actor/global_step_800"  # 可以使用"deepseek-r1"或本地模型路径   /mnt/usercache/huggingface/Qwen2.5-3B-Instruct   /mnt/usercache/mengjinxiang/Project/TinyZero/checkpoints/TinyZero/hybridqa-qwen2.5-3b-instruct/actor/global_step_400  /mnt/usercache/huggingface/Qwen2.5-3B-Instruct
-    log_file = os.path.join(base_path, "results/hybridqa/logs/hybridqa_sft_ppo_processing.log")
-    max_tokens = 2048  # 最大输出token数
-    temperature = 0.0  
+    # 设置文件路径
+    input_file = os.path.join(base_path, "data/hybridqa/test_top_1.json")
     
-    # 检查点参数 - 从哪个数据项开始（0表示从头开始）
-    start_from = 0
+    # 使用命令行参数，如果提供了参数则使用参数值，否则使用默认值
+    output_file = args.output_file
+    model_name = args.model_path
+    log_file = args.log_file
+    
+    # 使用命令行参数的最大token数
+    max_tokens = args.max_tokens
+    
+    # 使用命令行参数的起始索引
+    start_from = args.start_from
+    
+    # 使用命令行参数的温度值
+    temperature = args.temperature
+    
+    # 使用命令行参数的API端口
+    api_port = args.api_port
     
     # 确保输出目录和日志目录存在
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     
     # 处理数据
-    process_hybridqa_test_data(input_file, output_file, model_name, log_file, max_tokens, temperature, start_from)
+    process_hybridqa_test_data(input_file, output_file, model_name, log_file, max_tokens, temperature, start_from, api_port)
 
 if __name__ == "__main__":
     main()

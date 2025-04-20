@@ -151,26 +151,17 @@ def save_results(exact_match: float, f1_score: float, details: List[Dict], outpu
     
     print(f"Results saved to {output_file}")
 
+
 def main():
     parser = argparse.ArgumentParser(description='Evaluate TatQA results')
-    parser.add_argument('--results_file', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/tatqa/tatqa_sft_grpo_results.json',   #tatqa_sft_filter_results.json
-                        help='Path to the results JSON file')
-    parser.add_argument('--output_file', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/baseline/eval/eval_results/tatqa_sft_grpo_results.json',
-                        help='Path to save the evaluation results')
+    parser.add_argument('--results_file', type=str, required=True,
+                       help='Path to the JSON file with prediction results')
+    parser.add_argument('--output_file', type=str, required=True,
+                       help='Path to save the evaluation results')
     parser.add_argument('--base_path', type=str,
-                        help='Base path for resolving relative paths (optional)')
+                        help='Base path for the project (optional)')
     
     args = parser.parse_args()
-
-    if args.base_path:
-        # 如果路径不是绝对路径，则与base_path结合
-        if not os.path.isabs(results_file):
-            results_file = os.path.join(args.base_path, results_file)
-        if not os.path.isabs(output_file):
-            output_file = os.path.join(args.base_path, output_file)
-    
-    # 确保输出目录存在
-    os.makedirs(os.path.dirname(output_file), exist_ok=True)
     
     # Process the results file
     results_dict = process_result_file(args.results_file)

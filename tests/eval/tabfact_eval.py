@@ -126,27 +126,24 @@ def evaluate_tabfact_results(input_file, output_file=None, verbose=True):
 def main():
     """Main function to handle command line arguments"""
     parser = argparse.ArgumentParser(description="TabFact prediction results evaluation")
-    parser.add_argument("--input", "-i", 
-                        default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/tabfact/tabfact_sft_ppo_results.json', 
-                        help="Input file path (JSON file containing prediction results)")
-    parser.add_argument("--output", "-o", 
-                        default='eval_results/tabfact_sft_ppo_evaluation.json', 
-                        help="Output file path (evaluation results will be saved to this file)")
-    parser.add_argument("--quiet", "-q", action="store_true", 
-                        help="Quiet mode, don't print output")
+    parser.add_argument("--results_file", required=True,
+                        help="Input file path with prediction results (absolute path)")
+    parser.add_argument("--output_file", required=True,
+                        help="Output file path for evaluation results (absolute path)")
+    parser.add_argument('--base_path', type=str,
+                        help='Base path for the project (optional)')
     
     args = parser.parse_args()
     
     # Run evaluation
     result = evaluate_tabfact_results(
-        input_file=args.input, 
-        output_file=args.output, 
-        verbose=not args.quiet
+        input_file=args.results_file,
+        output_file=args.output_file,
+        verbose=True
     )
     
     if result is None:
         exit(1)
-
 
 if __name__ == "__main__":
     main()

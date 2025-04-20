@@ -382,7 +382,7 @@ def parse_arguments():
     parser.add_argument('--gold_file', type=str, help='Path to gold answer file')
     parser.add_argument('--log_file', type=str, help='Path to log file')
     parser.add_argument('--temperature', type=float, default=0.7, help='Temperature for model generation')
-    parser.add_argument('--max_tokens', type=int, default=3096, help='Maximum tokens for model output')
+    parser.add_argument('--max_tokens', type=int, default=4096, help='Maximum tokens for model output')
     parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
     parser.add_argument('--base_path', type=str, help='Base path for the project')
     

@@ -6,6 +6,7 @@ import re
 import collections
 import string
 import sys
+import argparse
 import os
 
 
@@ -343,29 +344,56 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
     
     return scores
 
+# def main():
+#     # 使用预设的文件路径，不需要命令行参数
+#     base_dir = "/netcache/mengjinxiang/Project/LLaMA-Factory-main"
+    
+#     # 模型结果文件
+#     model_results_file = os.path.join(base_dir, "results/hybridqa/hybridqa_sft_ppo_results.json") #不同类型需要改动
+    
+#     # 测试答案文件
+#     test_answers_file = os.path.join(base_dir, "data/hybridqa/test_answers.json")  #不用改动
+
+#     evaluate_save_dir = os.path.join(base_dir, "baseline/eval/eval_results/hybridqa_sft_ppo_evaluation.json")  #不同类型需要改动
+    
+#     if not os.path.exists(model_results_file):
+#         print(f"错误: 模型结果文件不存在: {model_results_file}")
+#         sys.exit(1)
+    
+#     if not os.path.exists(test_answers_file):
+#         print(f"错误: 测试答案文件不存在: {test_answers_file}")
+#         sys.exit(1)
+
+    
+#     # 评估模型结果
+#     evaluate_model(model_results_file, test_answers_file, evaluate_save_dir)
+
 def main():
-    # 使用预设的文件路径，不需要命令行参数
-    base_dir = "/netcache/mengjinxiang/Project/LLaMA-Factory-main"
+    parser = argparse.ArgumentParser(description='Evaluate HybridQA predictions')
+    parser.add_argument('--results_file', type=str, required=True,
+                       help='Path to model prediction results file')
+    parser.add_argument('--output_file', type=str, required=True,
+                       help='Path to save evaluation results')
+    parser.add_argument('--base_path', type=str,
+                       help='Base path for the project (default: /netcache/mengjinxiang/Project/LLaMA-Factory-main)')
+    parser.add_argument('--test_data', type=str, 
+                       default='data/hybridqa/test_answers.json',
+                       help='Path to test answers file (default maintained for reference)')
     
-    # 模型结果文件
-    model_results_file = os.path.join(base_dir, "results/hybridqa/hybridqa_sft_ppo_results.json") #不同类型需要改动
+    args = parser.parse_args()
     
-    # 测试答案文件
-    test_answers_file = os.path.join(base_dir, "data/hybridqa/test_answers.json")  #不用改动
-
-    evaluate_save_dir = os.path.join(base_dir, "baseline/eval/eval_results/hybridqa_sft_ppo_evaluation.json")  #不同类型需要改动
-    
-    if not os.path.exists(model_results_file):
-        print(f"错误: 模型结果文件不存在: {model_results_file}")
+    if not os.path.exists(args.results_file):
+        print(f"Error: Model results file does not exist: {args.results_file}")
         sys.exit(1)
     
-    if not os.path.exists(test_answers_file):
-        print(f"错误: 测试答案文件不存在: {test_answers_file}")
+    if not os.path.exists(args.test_data):
+        print(f"Error: Test answers file does not exist: {args.test_data}")
         sys.exit(1)
 
+    test_path = os.path.join(args.base_path, args.test_data) 
     
-    # 评估模型结果
-    evaluate_model(model_results_file, test_answers_file, evaluate_save_dir)
+    # Evaluate model results
+    evaluate_model(args.results_file, test_path, args.output_file)
 
 if __name__ == "__main__":
     main()

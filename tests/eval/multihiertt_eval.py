@@ -225,16 +225,29 @@ def evaluate_predictions(input_file, output_file=None):
     
     return exact_match, arithmetic_accuracy, avg_f1
 
+# def main():
+#     parser = argparse.ArgumentParser(description='Evaluate MultHier-TT predictions')
+#     parser.add_argument('--input', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/multihiertt/multihiertt_sft_results.json', 
+#                         help='Path to input file containing both predictions and ground truth answers')
+#     parser.add_argument('--output', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/baseline/eval/eval_results/multihiertt_sft_eval_results.json', 
+#                         help='Path to output evaluation results')
+    
+#     args = parser.parse_args()
+    
+#     evaluate_predictions(args.input, args.output)
+
 def main():
     parser = argparse.ArgumentParser(description='Evaluate MultHier-TT predictions')
-    parser.add_argument('--input', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/multihiertt/multihiertt_sft_results.json', 
-                        help='Path to input file containing both predictions and ground truth answers')
-    parser.add_argument('--output', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/baseline/eval/eval_results/multihiertt_sft_eval_results.json', 
+    parser.add_argument('--results_file', type=str, required=True, 
+                        help='Path to input file containing predictions and ground truth answers')
+    parser.add_argument('--output_file', type=str, required=True, 
                         help='Path to output evaluation results')
+    parser.add_argument('--base_path', type=str,
+                        help='Base path for the project (optional)')
     
     args = parser.parse_args()
     
-    evaluate_predictions(args.input, args.output)
+    evaluate_predictions(args.results_file, args.output_file)
 
 if __name__ == '__main__':
     main()

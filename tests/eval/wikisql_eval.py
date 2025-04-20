@@ -49,39 +49,6 @@ def extract_sql(solution_str):
     
     return None
 
-# def extract_sql(solution_str):
-#     """从模型回答中提取SQL查询，特别关注Answer:后的内容"""
-#     if solution_str is None:
-#         return None
-
-#     # 尝试从Answer标记后提取SQL
-#     answer_pattern = r'Answer:\s*```sql\s*(.*?)\s*(?:```|$)'
-#     answer_matches = re.findall(answer_pattern, solution_str, re.DOTALL | re.IGNORECASE)
-#     if answer_matches:
-#         return answer_matches[-1].strip()
-    
-#     # 如果没有明确的Answer标记，尝试从Markdown代码块中提取
-#     md_pattern = r'```sql\s*(.*?)\s*```'
-#     md_matches = re.findall(md_pattern, solution_str, re.DOTALL)
-#     if md_matches:
-#         return md_matches[-1].strip()
-    
-#     # 尝试提取顶层代码块
-#     code_pattern = r'```\s*(.*?)\s*```'
-#     code_matches = re.findall(code_pattern, solution_str, re.DOTALL)
-#     if code_matches:
-#         return code_matches[-1].strip()
-    
-#     # 检查是否包含SELECT字样
-#     if "SELECT" in solution_str.upper():
-#         # 尝试提取完整SQL语句
-#         sql_line_pattern = r'SELECT\s+.*?FROM\s+.*?(WHERE\s+.*?)?(?:;|$)'
-#         sql_line_matches = re.findall(sql_line_pattern, solution_str, re.IGNORECASE | re.DOTALL)
-#         if sql_line_matches:
-#             return sql_line_matches[-1].strip()
-    
-#     return None
-
 
 def normalize_sql(sql_string):
     """标准化SQL查询字符串，使其更宽松地匹配"""
@@ -501,17 +468,24 @@ def process_json_file(json_file, output_file=None, test_data_file=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='评估WikiSQL问题的模型回答')
-    parser.add_argument('--input', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/results/wikisql/wikisql_sft+rl_results.json',
-                        help='包含待评估项目的JSON文件路径')
-    parser.add_argument('--output', type=str, default='eval_results/wikisql_sft+rl_evaluation_results.json',
-                        help='评估结果输出文件路径')
-    parser.add_argument('--test_data', type=str, default='/netcache/mengjinxiang/Project/LLaMA-Factory-main/data/wikisql/wikisql_test_sft.json',
-                        help='WikiSQL测试数据文件路径，用于获取准确的表头信息')
+    parser = argparse.ArgumentParser(description='Evaluate model answers for WikiSQL questions')
+    parser.add_argument('--results_file', type=str, required=True,
+                       help='Path to JSON file containing predictions')
+    parser.add_argument('--output_file', type=str, required=True,
+                       help='Path to output file for evaluation results')
+    parser.add_argument('--base_path', type=str,
+                       help='Base path for the project (optional)')
+    parser.add_argument('--test_data', type=str, 
+                       default='data/wikisql/wikisql_test.json',
+                       help='Path to WikiSQL test data file for accurate header information')
+
     
     args = parser.parse_args()
+
+    test_path = os.path.join(args.base_path, args.test_data)
     
-    process_json_file(args.input, args.output, args.test_data)
+    # Process with new parameter names
+    process_json_file(args.results_file, args.output_file, test_path)
 
 if __name__ == '__main__':
     main()
