@@ -47,12 +47,51 @@ def create_prompt_from_tabfact(item):
     
     return prompt
 
+# def extract_answer_from_response(response):
+#     """Extract final answer (SUPPORTS or REFUTES) from response"""
+#     # Use regex to find "Answer: xxx" pattern
+#     match = re.search(r'Answer:\s*(SUPPORTS|REFUTES)', response, re.IGNORECASE)
+#     if match:
+#         return match.group(1).upper()  # Return uppercase answer
+#     return None
+
 def extract_answer_from_response(response):
-    """Extract final answer (SUPPORTS or REFUTES) from response"""
-    # Use regex to find "Answer: xxx" pattern
+    """Extract final answer (SUPPORTS or REFUTES) from response, supporting multiple formats"""
+    if not response:
+        return None
+    
+    # Try to extract answer from <answer> tags
+    answer_tag_pattern = re.search(r'<answer>(.*?)</answer>', response, re.DOTALL)
+    if answer_tag_pattern:
+        answer_content = answer_tag_pattern.group(1).strip()
+        
+        # Check if there's an "Answer:" prefix inside the tags
+        if "Answer:" in answer_content:
+            after_answer = answer_content.split("Answer:", 1)[1].strip()
+        else:
+            after_answer = answer_content
+        
+        # Check for SUPPORTS or REFUTES in the extracted content
+        if re.search(r'(SUPPORTS|REFUTES)', after_answer, re.IGNORECASE):
+            if re.search(r'SUPPORTS', after_answer, re.IGNORECASE):
+                return "SUPPORTS"
+            elif re.search(r'REFUTES', after_answer, re.IGNORECASE):
+                return "REFUTES"
+    
+    # Try to use regex to find "Answer: xxx" pattern
     match = re.search(r'Answer:\s*(SUPPORTS|REFUTES)', response, re.IGNORECASE)
     if match:
         return match.group(1).upper()  # Return uppercase answer
+    
+    # If no explicit Answer tag, try to find in the last few lines
+    last_lines = response.strip().split('\n')[-3:]  # Get last three lines
+    for line in reversed(last_lines):
+        if "SUPPORTS" in line.upper():
+            return "SUPPORTS"
+        elif "REFUTES" in line.upper():
+            return "REFUTES"
+    
+    # If all extraction methods fail, return None
     return None
 
 def process_tabfact_data(input_file, output_file, model_name, log_file, max_tokens=2048, start_from=0, api_port=8000, temperature=0.6):

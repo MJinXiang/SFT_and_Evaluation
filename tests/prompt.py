@@ -123,6 +123,90 @@ Your response should end with `Answer: xxx` (answer to the question).
 """
 
 
+COT_PROMPT_HITAB_TEMPLATE = """You are capable of effectively identifying the hierarchical structure of the table. Based on the provided table and textual description, please provide the answer to the question.
+You should think step-by-step to reach the final answer.
+
+## Table:
+{table}
+
+## Question:
+{question}
+
+## Response
+Your response should end with `Answer: xxx` (answer to the question).
+"""
+
+
+COT_PROMPT_FEVEROUS_TEMPLATE = """## Task:
+You will predict the claim's label based on the given claim and table (text). There are 3 possible labels: SUPPORTS, REFUTES, and NOT ENOUGH INFO. SUPPORTS means the claim is supported by the table or text. REFUTES means the claim is refuted by the table or text. NOT ENOUGH INFO means the table (text) does not provide enough information to make the decision.
+You should think step-by-step to reach the final answer.
+
+## Table:
+{table}
+
+## Text:
+{text}
+
+## Claim:
+{claim}
+
+## Response
+Your response should end with `Answer: xxx` (answer to the question).
+"""
+
+
+COT_PROMPT_TOTTO_TEMPLATE = """You are given a table in one of the following formats: html, plain text, or json.
+The table is accompanied by a context.
+The context is in the form of page title, table title, section title, and a few sentences taken from the same section as the table.
+The table has some highlighted cells. These cells are wrapped with <hl> and </hl> tags.
+Your job is to use the table and the context to produce a sentence.
+The sentence must have the following characteristics:
+- it must be structured in a way that allows the reader to understand it without seeing the table
+- it can’t contain lists
+- it must be only a single sentence long
+- it should focus on the content of the highlighted cells wrapped with <hl> and </hl> tags
+- it must not explicitly mention that some cells are highlighted
+
+## TABLE:
+{table}
+
+## CONTEXT:
+page title: {page_title}
+section title: {section_title}
+section text: {section_text} 
+
+## Response
+Your response should end with `Answer: xxx` (the final sentence).
+"""
+
+
+COT_PROMPT_FETAQA_TEMPLATE = """You are given a table in one of the following formats: html, plain text, or json.
+The table is accompanied by a context.
+The context is in the form of page title, table title, section title.
+The table has some highlighted cells. These cells are wrapped with <hl> and </hl> tags.
+Your task is to answer the question based on the table and the text content, and the answer should be a single sentence.
+The sentence must have the following characteristics:
+- it must be able to answer what the question asks
+- it can’t contain lists
+- it must be only a single sentence long
+- it should focus on the content of the highlighted cells wrapped with <hl> and </hl> tags
+- it must not explicitly mention that some cells are highlighted
+
+## TABLE:
+{table}
+
+## CONTEXT:
+page title: {page_title}
+section title: {section_title}
+
+## Question:
+{question}
+
+## Response
+Your response should end with `Answer: xxx` (the final sentence).
+"""
+
+
 END_TO_END_PROMPT_TATQA_TEMPLATE = """Below is an instruction that describes a question answering task in the finance domain, paired with an input table and its
 relevant text that provide further context. The given question is relevant to the table and text. Generate an appropriate
 answer to the given question.

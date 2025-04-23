@@ -87,15 +87,27 @@ def create_prompt_from_multhiertt(item):
     
     return prompt
 
-def extract_answer_from_response(model_answer):
 
+def extract_answer_from_response(model_answer):
     if not model_answer:
         return ""
     
+    # 首先尝试从 <answer> 标签中提取
+    answer_tag_pattern = re.search(r'<answer>(.*?)</answer>', model_answer, re.DOTALL)
+    if answer_tag_pattern:
+        answer_content = answer_tag_pattern.group(1).strip()
+        
+        # 如果标签内容中包含 "Answer:"，进一步提取
+        if "Answer:" in answer_content:
+            return answer_content.split("Answer:")[1].strip()
+        return answer_content
+    
+    # 其次尝试寻找 "Answer:" 格式
     answer_pattern = re.search(r'Answer:\s*(.*?)(?:$|\.|\n)', model_answer, re.DOTALL)
     if answer_pattern:
         return answer_pattern.group(1).strip()
     
+    # 最后回退到使用最后一行
     lines = model_answer.strip().split('\n')
     return lines[-1].strip()
 

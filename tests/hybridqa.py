@@ -98,13 +98,6 @@ def create_prompt_from_hybridqa(item):
     
     return prompt
 
-# def extract_answer_from_response(model_answer):
-#     """从模型回答中提取最终答案"""
-#     # 寻找"Answer: "模式
-#     match = re.search(r'Answer:\s*(.*?)$', model_answer, re.DOTALL)
-#     if match:
-#         return match.group(1).strip()
-#     return ""
 
 def extract_answer_from_response(model_answer):
     """
