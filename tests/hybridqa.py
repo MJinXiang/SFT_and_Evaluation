@@ -1,95 +1,158 @@
-#### python
-# filepath: /netcache/mengjinxiang/Project/LLaMA-Factory-main/baseline/hybridqa_test.py
+
+
 
 import json
 import os
 import logging
 import time
-import random
-import sys
 import re
+import sys
 import argparse
-import string
 from datetime import datetime
-from llm import initialize_client, call_api_with_retry
+from typing import Dict, Any, List, Tuple, Optional
+from vllm import LLM, SamplingParams
+from transformers import AutoTokenizer
+from tqdm import tqdm
 from prompt import COT_PROMPT_HYBRIDQA_TEMPLATE
 
-# 设置日志
+
+# Setup logging
 def setup_logger(log_file):
-    """设置日志记录器"""
+    """Set up the logger"""
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     
-    logger = logging.getLogger('hybridqa_test_processor')
+    logger = logging.getLogger('hybridqa_processor')
     logger.setLevel(logging.INFO)
     
-    # 创建文件处理器
     file_handler = logging.FileHandler(log_file, encoding='utf-8')
     file_handler.setLevel(logging.INFO)
-    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(file_formatter)
     
-    # 创建控制台处理器
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
+    
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
     
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
     
     return logger
 
+
+class VLLMGenerator:  
+    """  
+    A class for generating text using vLLM with support for different models.  
+    """  
+    
+    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+        """  
+        Initialize the VLLMGenerator with model and tokenizer.  
+        """  
+        # Default EOS tokens list - can be overridden based on model  
+        self.EOS = ["<|im_end|>", "</s>"]  
+        
+        self.model = LLM(  
+            model=model_path,  
+            max_model_len=max_model_len,  
+            trust_remote_code=True,  
+            distributed_executor_backend='ray',  
+            tensor_parallel_size=tensor_parallel_size
+        )  
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+    
+    def generate(self, prompts, max_new_tokens=2048, temperature=0.0, top_p=1.0, verbose=False):
+        try:  
+            # Apply chat template to prompts  
+            chat_prompts = []  
+            for prompt in prompts:
+                # Convert to chat format with a single user message
+                messages = [{"role": "user", "content": prompt}]
+                chat_prompts.append(self.tokenizer.apply_chat_template(  
+                    messages,  
+                    tokenize=False,  
+                    add_generation_prompt=True,  
+                ))  
+            
+            if verbose and len(chat_prompts) > 0:  
+                print("Example chat prompt:")  
+                print(chat_prompts[0])  
+            
+            # Batch generation with vLLM
+            vllm_outputs = self.model.generate(  
+                prompts=chat_prompts,  
+                sampling_params=SamplingParams(  
+                    max_tokens=max_new_tokens,  
+                    temperature=temperature,  
+                    top_p=top_p,  
+                    stop=self.EOS,  
+                ),  
+                use_tqdm=True,  
+            )  
+            
+            # Process generated outputs  
+            raw_generations = [x.outputs[0].text for x in vllm_outputs]  
+            return raw_generations  
+            
+        except Exception as e:  
+            print(f"Error in vLLM generation: {str(e)}")  
+            raise
+
+
 def format_table_for_prompt(table_data):
-    """将表格格式化为prompt中易于阅读的格式"""
+    """Format table data into a string representation for prompts"""
     result = []
     
-    # 添加介绍信息
+    # Add introduction information
     if 'intro' in table_data and table_data['intro']:
         result.append(f"Introduction: {table_data['intro']}")
     
-    # 添加章节标题和文本
+    # Add section title and text
     if 'section_title' in table_data and table_data['section_title']:
         section_text = table_data.get('section_text', '')
         result.append(f"Section Description: {section_text}")
     
-    # 添加表格内容
+    # Add table content
     if 'header' in table_data and table_data['header'] and 'data' in table_data:
-        # 获取表头
+        # Get the header
         if table_data['header'][0]:
             headers = table_data['header'][0]
-            # 格式化表头
+            # Format header
             header_row = " | ".join(headers)
             result.append(header_row)
         
-        # 格式化数据行
+        # Format data rows
         for row in table_data['data']:
             result.append(" | ".join(row))
     
     return "\n".join(result)
 
+
 def format_text_for_prompt(link_data):
-    """将链接文本格式化为prompt中的字符串格式，添加文本前缀"""
+    """Format linked text data into a string representation for prompts"""
     result = []
     
     for link, content in link_data.items():
-        # 提取链接的最后部分作为文本前缀
+        # Extract the last part of the link as the prefix
         link_parts = link.split('/')
         prefix = link_parts[-1] if link_parts else link
         
-        # 添加带前缀的文本
+        # Add text with prefix
         result.append(f"{prefix}: {content}")
     
     return "\n\n".join(result)
 
+
 def create_prompt_from_hybridqa(item):
-    """为HybridQA数据创建提示"""
-    # 格式化表格
+    """Create prompt for a HybridQA item"""
+    # Format table
     table_str = format_table_for_prompt(item["table"])
     
-    # 格式化文本
+    # Format text
     text_str = format_text_for_prompt(item["relevant_links"])
     
-    # 生成提示
+    # Generate prompt
     prompt = COT_PROMPT_HYBRIDQA_TEMPLATE.format(
         table=table_str, 
         text=text_str, 
@@ -101,58 +164,61 @@ def create_prompt_from_hybridqa(item):
 
 def extract_answer_from_response(model_answer):
     """
-    从模型回答中提取最终答案，支持多种格式：
-    1. "Answer: xxx"格式
-    2. "<answer>xxx</answer>"标签格式
-    3. "<answer>Answer: xxx</answer>"组合格式
+    Extract final answer from the model response, supporting multiple formats:
+    1. "Answer: xxx" format
+    2. "<answer>xxx</answer>" tag format
+    3. "<answer>Answer: xxx</answer>" combined format
     """
-    # 如果响应为空，返回空字符串
+    # If response is empty, return empty string
     if not model_answer:
         return ""
     
-    # 检查是否有<answer>标签
+    # Check if there's an <answer> tag
     answer_tag_pattern = re.search(r'<answer>(.*?)</answer>', model_answer, re.DOTALL)
     if answer_tag_pattern:
-        # 从<answer>标签中提取内容
+        # Extract content from <answer> tag
         answer_content = answer_tag_pattern.group(1).strip()
         
-        # 检查answer标签内是否有"Answer:"标记
+        # Check if there's an "Answer:" mark inside the tag
         if "Answer:" in answer_content:
             return answer_content.split("Answer:")[1].strip()
-        # 否则直接返回标签内的全部内容
+        # Otherwise return the full content inside the tag
         return answer_content
     
-    # 如果没有<answer>标签但有"Answer:"标记
+    # If no <answer> tag but there's an "Answer:" mark
     elif "Answer:" in model_answer:
         return model_answer.split("Answer:")[1].strip()
     
-    # 如果没有任何标记，返回整个响应
+    # If no markers, return the entire response
     return model_answer.strip()
 
-def process_hybridqa_test_data(input_file, output_file, model_name, log_file, max_tokens=2048, temperature=0.0, start_from=0, api_port=8000):
-    """处理HybridQA测试数据集，无需评估答案正确性"""
+
+def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, max_tokens=2048,
+                             temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0):
+    """Process HybridQA dataset with batched VLLM inference"""
     logger = setup_logger(log_file)
     
-    # 记录开始时间
+    # Record start time
     start_time = time.time()
-    logger.info(f"Started processing HybridQA test data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Started processing HybridQA data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Input file: {input_file}")
     logger.info(f"Output file: {output_file}")
-    logger.info(f"Using model: {model_name}")
-    logger.info(f"Temperature: {temperature}")
-    logger.info(f"API port: {api_port}")
-    logger.info(f"Starting from index: {start_from}")
+    logger.info(f"Using model: {model_path}")
+    logger.info(f"Batch size: {batch_size}")
     
-    # 初始化模型客户端
+    # Initialize VLLM generator
     try:
-        client_info = initialize_client({"model_path": model_name, "api_port": api_port})
-        model_type = client_info["model_type"]
-        logger.info(f"Model client initialized successfully, type: {model_type}")
+        generator = VLLMGenerator(
+            model_path=model_path,
+            max_model_len=8192,
+            tensor_parallel_size=tensor_parallel_size
+        )
+        logger.info(f"VLLM generator initialized successfully")
     except Exception as e:
-        logger.error(f"Model client initialization failed: {e}")
+        logger.error(f"VLLM initialization failed: {e}")
         return
     
-    # 读取JSON文件
+    # Read data items
     data_items = []
     try:
         with open(input_file, 'r', encoding='utf-8') as f:
@@ -162,137 +228,126 @@ def process_hybridqa_test_data(input_file, output_file, model_name, log_file, ma
         logger.error(f"Failed to read input file: {e}")
         return
     
-    # 检查是否存在中间结果，如果有则加载
+    # Check if intermediate results exist
     results = []
-    if start_from > 0 and os.path.exists(f"{output_file}.temp"):
+    processed_ids = set()
+    if os.path.exists(f"{output_file}.temp"):
         try:
             with open(f"{output_file}.temp", 'r', encoding='utf-8') as f:
                 results = json.load(f)
+                
+            # Get IDs of already processed items
+            for result in results:
+                processed_ids.add(result.get("question_id", ""))
+                
             logger.info(f"Loaded intermediate results with {len(results)} records")
+            logger.info(f"Found {len(processed_ids)} already processed items")
         except Exception as e:
             logger.error(f"Failed to load intermediate results: {e}, starting from beginning")
-            start_from = 0
+            results = []
+            processed_ids = set()
+    
+    # Filter already processed items and apply start_from
+    remaining_items = []
+    for idx, item in enumerate(data_items):
+        if idx < start_from:
+            continue
+        item_id = item.get("question_id", f"item_{idx}")
+        if item_id not in processed_ids:
+            remaining_items.append(item)
+    
+    logger.info(f"Remaining items to process: {len(remaining_items)}/{len(data_items)}")
     
     success_count = len(results)
     error_count = 0
     
-    # 准备评估结果格式
-    predictions = {}
+    # Prepare evaluation format
+    predictions = {result.get("question_id", ""): result.get("extracted_answer", "") for result in results}
     
-    # 处理每个数据项
-    for i, item in enumerate(data_items[start_from:], start=start_from):
-        item_id = item.get("question_id", f"item-{i}")
+    # Process data in batches
+    for batch_start in range(0, len(remaining_items), batch_size):
+        batch_end = min(batch_start + batch_size, len(remaining_items))
+        current_batch = remaining_items[batch_start:batch_end]
         
-        logger.info(f"Processing item {i+1}/{len(data_items)}... [ID: {item_id}]")
+        # Create prompts for current batch
+        prompts = []
+        for item in current_batch:
+            prompt = create_prompt_from_hybridqa(item)
+            prompts.append(prompt)
         
-        # 获取问题
-        question = item.get("question", "")
-        
-        # 创建提示
-        prompt = create_prompt_from_hybridqa(item)
-        
-        # 准备用户消息
-        messages = [{"role": "user", "content": prompt}]
-        
+        # Generate responses for the batch
         try:
-            # 记录API调用开始时间
-            call_start = time.time()
-            
-            # 调用API
-            api_result = call_api_with_retry(
-                client_info=client_info,
-                messages=messages,
-                max_tokens=max_tokens,
+            batch_start_time = time.time()
+            responses = generator.generate(
+                prompts=prompts, 
+                max_new_tokens=max_tokens,
                 temperature=temperature,
-                top_p=1.0,
-                max_retries=10
+                top_p=0.8,
+                verbose=(batch_start == 0)  # Only show example on first batch
             )
+            batch_time = time.time() - batch_start_time
+            logger.info(f"Batch inference completed in {batch_time:.2f} seconds ({batch_time/len(current_batch):.2f} seconds per item)")
             
-            # 初始化thinking变量以避免未定义错误
-            thinking = None
-            
-            # 处理API结果 - 检查是否是deepseek-r1模型
-            if model_type in ["deepseek-r1", "deepseek-r1-inner"]:
-                # deepseek-r1返回三个值：成功标志、答案内容和推理内容
-                success, answer, thinking = api_result
-            else:
-                # 其他模型返回两个值：成功标志和答案内容
-                success, answer = api_result
-
-            if not success:
-                raise Exception(f"API call failed: {answer}")
-            
-            # 计算API调用时间
-            call_time = time.time() - call_start
-            
-            # 处理返回的响应 - 提取token使用情况
-            token_info = {}
-            if model_type == "openai" and hasattr(answer, 'usage'):
-                token_info = {
-                    "completion_tokens": getattr(answer.usage, 'completion_tokens', 'N/A'),
-                    "prompt_tokens": getattr(answer.usage, 'prompt_tokens', 'N/A'),
-                    "total_tokens": getattr(answer.usage, 'total_tokens', 'N/A')
+            # Process each response
+            for i, (item, response) in enumerate(zip(current_batch, responses)):
+                # Record start time for processing this item
+                item_start_time = time.time()
+                
+                # Extract item information
+                item_id = item.get("question_id", f"item-{i+batch_start}")
+                question = item.get("question", "")
+                
+                # Calculate current item index
+                global_item_index = batch_start + i + 1
+                
+                logger.info(f"Processing item {global_item_index}/{len(remaining_items)}... [ID: {item_id}]")
+                
+                # Extract final answer
+                extracted_answer = extract_answer_from_response(response)
+                
+                # Calculate processing time
+                item_time = time.time() - item_start_time
+                
+                # Log detailed information
+                logger.info(f"Question: {question}")
+                logger.info(f"Model answer: {extracted_answer}")
+                logger.info(f"Processing time: {item_time:.6f} seconds")
+                logger.info("-" * 50)
+                
+                # Build result object
+                result = {
+                    "question_id": item_id,
+                    "question": question,
+                    "model_answer": response,
+                    "extracted_answer": extracted_answer,
+                    "processing_time": item_time
                 }
-                # 提取答案内容
-                answer = answer.choices[0].message.content
-            else:
-                token_info = {"note": "This model type does not provide token usage statistics"}
+                
+                # Add to results and update tracking
+                results.append(result)
+                success_count += 1
+                
+                # Add to predictions dict for evaluation format
+                predictions[item_id] = extracted_answer
+                
+                # # Save intermediate results every 5 items
+                # if (global_item_index % 100 == 0):
+                #     with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+                #         json.dump(results, f, ensure_ascii=False, indent=2)
+                #     logger.info(f"Saved intermediate results - {len(results)}/{len(data_items)} items processed")
             
-            # 提取最终答案
-            extracted_answer = extract_answer_from_response(answer)
-            
-            # 构建结果对象
-            result = {
-                "question_id": item_id,
-                "question": question,
-                "model_answer": answer,
-                "extracted_answer": extracted_answer,
-                "processing_time": call_time,
-                "token_usage": token_info
-            }
-            
-            # 添加思考内容字段（适用于deepseek-r1模型）
-            if thinking is not None:
-                result["reasoning"] = thinking
-            
-            results.append(result)
-            success_count += 1
-            
-            # 添加到预测字典中，用于生成评估格式
-            predictions[item_id] = extracted_answer
-            
-            # 记录详细信息
-            logger.info(f"Question: {question}")
-            logger.info(f"Model answer: {extracted_answer}")
-            logger.info(f"Processing time: {call_time:.2f} seconds")
-            logger.info(f"Token usage: {token_info}")
-            logger.info("-" * 50)
-            
+            # Save batch results
+            with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
+                
         except Exception as e:
             error_count += 1
-            logger.error(f"Error processing item {i+1}: {e}")
-            # 记录错误信息
-            result = {
-                "question_id": item_id,
-                "question": question,
-                "model_answer": f"Processing error: {str(e)}",
-                "error": str(e)
-            }
-            results.append(result)
-            
-            # 添加空预测以避免评估错误
-            predictions[item_id] = ""
-        
-        # 每5个项目或出现错误时保存中间结果
-        if (i + 1) % 5 == 0 or error_count > 0:
-            try:
-                with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
-                    json.dump(results, f, ensure_ascii=False, indent=2)
-                logger.info(f"Saved intermediate results ({i+1}/{len(data_items)})")
-            except Exception as e:
-                logger.error(f"Failed to save intermediate results: {e}")
+            logger.error(f"Error processing batch: {e}")
+            # Save what we have so far
+            with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+                json.dump(results, f, ensure_ascii=False, indent=2)
     
-    # 保存详细结果到JSON文件
+    # Save detailed results to JSON file
     try:
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
@@ -300,10 +355,10 @@ def process_hybridqa_test_data(input_file, output_file, model_name, log_file, ma
     except Exception as e:
         logger.error(f"Failed to save detailed results file: {e}")
     
-    # 保存评估格式的输出（只包含问题ID和预测答案）
+    # Save evaluation format output (containing only question ID and prediction)
     eval_output_file = output_file.replace('.json', '_eval.json')
     try:
-        # 为评估格式创建数据结构
+        # Create data structure for evaluation format
         eval_data = [
             {
                 "question_id": qid,
@@ -318,35 +373,46 @@ def process_hybridqa_test_data(input_file, output_file, model_name, log_file, ma
     except Exception as e:
         logger.error(f"Failed to save evaluation format results: {e}")
 
-    # 记录摘要信息
+    # Log summary information
     total_time = time.time() - start_time
     logger.info("=" * 60)
     logger.info(f"Processing completed! Total time: {total_time:.2f} seconds")
     logger.info(f"Successfully processed: {success_count}/{len(data_items)}")
     logger.info(f"Processing failures: {error_count}/{len(data_items)}")
+    average_time_per_item = total_time / len(remaining_items) if len(remaining_items) > 0 else 0
+    logger.info(f"Average processing time per item: {average_time_per_item:.2f} seconds")
     logger.info("=" * 60)
 
+
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Process HybridQA dataset with LLM')
+    parser = argparse.ArgumentParser(description='Process HybridQA dataset with VLLM batch inference')
     
-    parser.add_argument('--api_port', type=int, default=8000, help='API port for local model server')
-    parser.add_argument('--output_file', type=str, help='Path to save results')
-    parser.add_argument('--model_path', type=str, help='Model path or identifier')
+    parser.add_argument('--output_file', type=str,  help='Path to save results')
+    parser.add_argument('--model_path', type=str,  help='Model path or identifier')
     parser.add_argument('--log_file', type=str, help='Path to log file')
-    parser.add_argument('--temperature', type=float, default=0.6, help='Temperature for model generation')
+    parser.add_argument('--temperature', type=float, default=0.0, help='Temperature for model generation')
     parser.add_argument('--max_tokens', type=int, default=4096, help='Maximum tokens for model output')
+    parser.add_argument('--tensor_parallel_size', type=int, default=2, help='Tensor parallelism size')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for inference')
     parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
     parser.add_argument('--base_path', type=str, help='Base path for the project')
     
     return parser.parse_args()
+
 
 def main():
     # 解析命令行参数
     args = parse_arguments()
     
     # 处理 base_path
+    base_path = None
     if args.base_path and os.path.exists(args.base_path):
         base_path = args.base_path
+    else:
+        # Try to find base path automatically
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if os.path.basename(current_dir) == "tests":
+            base_path = os.path.dirname(current_dir)
     
     if not base_path:
         print("Error: Unable to find project root directory")
@@ -359,7 +425,7 @@ def main():
     
     # 使用命令行参数，如果提供了参数则使用参数值，否则使用默认值
     output_file = args.output_file
-    model_name = args.model_path
+    model_path = args.model_path
     log_file = args.log_file
     
     # 使用命令行参数的最大token数
@@ -371,15 +437,23 @@ def main():
     # 使用命令行参数的温度值
     temperature = args.temperature
     
-    # 使用命令行参数的API端口
-    api_port = args.api_port
-    
     # 确保输出目录和日志目录存在
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     
     # 处理数据
-    process_hybridqa_test_data(input_file, output_file, model_name, log_file, max_tokens, temperature, start_from, api_port)
+    process_hybridqa_data_batch(
+        input_file=input_file, 
+        output_file=output_file, 
+        model_path=model_path, 
+        log_file=log_file,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        tensor_parallel_size=args.tensor_parallel_size,
+        batch_size=args.batch_size,
+        start_from=start_from
+    )
+
 
 if __name__ == "__main__":
     main()

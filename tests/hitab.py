@@ -1,14 +1,17 @@
+
+
 import json
 import os
 import logging
 import time
-import random
+import re
 import sys
 import argparse
-import re
 from datetime import datetime
-from typing import Dict, Any, List, Tuple
-from llm import initialize_client, call_api_with_retry
+from typing import Dict, Any, List, Tuple, Optional
+from vllm import LLM, SamplingParams
+from transformers import AutoTokenizer
+from tqdm import tqdm
 from prompt import COT_PROMPT_HITAB_TEMPLATE
 
 
@@ -35,6 +38,67 @@ def setup_logger(log_file):
     
     return logger
 
+
+class VLLMGenerator:  
+    """  
+    A class for generating text using vLLM with support for different models.  
+    """  
+    
+    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+        """  
+        Initialize the VLLMGenerator with model and tokenizer.  
+        """  
+        # Default EOS tokens list - can be overridden based on model  
+        self.EOS = ["<|im_end|>", "</s>"]  
+        
+        self.model = LLM(  
+            model=model_path,  
+            max_model_len=max_model_len,  
+            trust_remote_code=True,  
+            distributed_executor_backend='ray',  
+            tensor_parallel_size=tensor_parallel_size
+        )  
+        
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+    
+    def generate(self, prompts, max_new_tokens=2048, temperature=0.0, top_p=1.0, verbose=False):
+        try:  
+            # Apply chat template to prompts  
+            chat_prompts = []  
+            for prompt in prompts:
+                # Convert to chat format with a single user message
+                messages = [{"role": "user", "content": prompt}]
+                chat_prompts.append(self.tokenizer.apply_chat_template(  
+                    messages,  
+                    tokenize=False,  
+                    add_generation_prompt=True,  
+                ))  
+            
+            if verbose and len(chat_prompts) > 0:  
+                print("Example chat prompt:")  
+                print(chat_prompts[0])  
+            
+            # Batch generation with vLLM
+            vllm_outputs = self.model.generate(  
+                prompts=chat_prompts,  
+                sampling_params=SamplingParams(  
+                    max_tokens=max_new_tokens,  
+                    temperature=temperature,  
+                    top_p=top_p,  
+                    stop=self.EOS,  
+                ),  
+                use_tqdm=True,  
+            )  
+            
+            # Process generated outputs  
+            raw_generations = [x.outputs[0].text for x in vllm_outputs]  
+            return raw_generations  
+            
+        except Exception as e:  
+            print(f"Error in vLLM generation: {str(e)}")  
+            raise
+
+
 def format_table(table_data):
     """Format table data as a string representation"""
     if not table_data or "texts" not in table_data:
@@ -56,6 +120,7 @@ def format_table(table_data):
         table_str += row_str + "\n"
 
     return table_str
+
 
 def create_prompt_from_hitab(item: Dict[str, Any]) -> str:
     """Create prompt for HiTAB item"""
@@ -97,6 +162,7 @@ def extract_final_answer(response):
     
     # If all extraction methods fail, return the original response
     return response
+
 
 def check_answer_correctness(model_answer: Any, expected_answer: List) -> Tuple[bool, Any]:
     """
@@ -161,8 +227,10 @@ def check_answer_correctness(model_answer: Any, expected_answer: List) -> Tuple[
     # Other cases are considered incorrect
     return False, model_answer
 
-def process_hitab_data(input_file, output_file, model_name, log_file, max_tokens=2048, temperature=0.7, start_from=0, api_port=8000):
-    """Process HiTAB dataset"""
+
+def process_hitab_data_batch(input_file, output_file, model_path, log_file, max_tokens=2048, 
+                          temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0):
+    """Process HiTAB dataset with batched VLLM inference"""
     logger = setup_logger(log_file)
     
     # Record start time
@@ -170,171 +238,199 @@ def process_hitab_data(input_file, output_file, model_name, log_file, max_tokens
     logger.info(f"Started processing HiTAB data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Input file: {input_file}")
     logger.info(f"Output file: {output_file}")
-    logger.info(f"Using model: {model_name}")
-    logger.info(f"Temperature: {temperature}")
-    logger.info(f"API port: {api_port}")
-    logger.info(f"Starting from index: {start_from}")
+    logger.info(f"Using model: {model_path}")
+    logger.info(f"Batch size: {batch_size}")
     
-    # Initialize model client
+    # Initialize VLLM generator
     try:
-        client_info = initialize_client({"model_path": model_name, "api_port": api_port})
-        logger.info(f"Model client initialized successfully, type: {client_info['model_type']}")
+        generator = VLLMGenerator(
+            model_path=model_path,
+            max_model_len=8192,
+            tensor_parallel_size=tensor_parallel_size
+        )
+        logger.info(f"VLLM generator initialized successfully")
     except Exception as e:
-        logger.error(f"Model client initialization failed: {e}")
+        logger.error(f"VLLM initialization failed: {e}")
         return
     
-    # Read test data JSON file
+    # Read data items
     test_data = []
     try:
+        # For JSONL format, read line by line
         with open(input_file, 'r', encoding='utf-8') as f:
-            # For JSONL format, read line by line
             for line in f:
                 if line.strip():  # Skip empty lines
                     item = json.loads(line.strip())
                     test_data.append(item)
-        logger.info(f"Loaded {len(test_data)} table data items from test file (JSONL format)")
+        logger.info(f"Loaded {len(test_data)} data items from JSONL file")
     except Exception as e:
         logger.error(f"Failed to read input file: {e}")
         return
     
-    # Check if intermediate results exist, if so, load them
+    # Check if intermediate results exist
     results = []
-    if start_from > 0 and os.path.exists(f"{output_file}.temp"):
+    processed_ids = set()
+    if os.path.exists(f"{output_file}.temp"):
         try:
             with open(f"{output_file}.temp", 'r', encoding='utf-8') as f:
-                results = json.load(f)
+                temp_data = json.load(f)
+                if isinstance(temp_data, dict) and "results" in temp_data:
+                    results = temp_data["results"]
+                else:
+                    results = temp_data
+                
+            # Get IDs of already processed items
+            for result in results:
+                processed_ids.add(result.get("id", ""))
+                
             logger.info(f"Loaded intermediate results with {len(results)} records")
+            logger.info(f"Found {len(processed_ids)} already processed items")
         except Exception as e:
             logger.error(f"Failed to load intermediate results: {e}, starting from beginning")
-            start_from = 0
+            results = []
+            processed_ids = set()
+    
+    # Filter out already processed items and apply start_from
+    remaining_items = []
+    for idx, item in enumerate(test_data):
+        if idx < start_from:
+            continue
+        item_id = item.get("id", f"item_{idx}")
+        if item_id not in processed_ids:
+            remaining_items.append(item)
+    
+    logger.info(f"Remaining items to process: {len(remaining_items)}/{len(test_data)}")
     
     success_count = len(results)
     error_count = 0
-    correct_count = 0
+    correct_count = sum(1 for result in results if result.get("is_correct", False))
     
-    # Process each data item
-    for i, item in enumerate(test_data[start_from:], start=start_from):
-        item_id = item.get("id", f"item_{i}")
-        question = item.get("question", "")
-        expected_answer = item.get("answer", [])
+    # Process data in batches
+    for batch_start in range(0, len(remaining_items), batch_size):
+        batch_end = min(batch_start + batch_size, len(remaining_items))
+        current_batch = remaining_items[batch_start:batch_end]
         
-        logger.info(f"Processing item {i+1}/{len(test_data)}... [ID: {item_id}]")
+        # Create prompts for current batch
+        prompts = []
+        for item in current_batch:
+            prompt = create_prompt_from_hitab(item)
+            prompts.append(prompt)
         
-        # Create prompt for HiTAB
-        prompt = create_prompt_from_hitab(item)
-        
-        # Prepare user message
-        messages = [{"role": "user", "content": prompt}]
-        
+        # Generate responses for the batch
         try:
-            # Record API call start time
-            call_start = time.time()
-            
-            # Call API
-            api_result = call_api_with_retry(
-                client_info=client_info,
-                messages=messages,
-                max_tokens=max_tokens,
+            batch_start_time = time.time()
+            responses = generator.generate(
+                prompts=prompts, 
+                max_new_tokens=max_tokens,
                 temperature=temperature,
                 top_p=0.8,
-                max_retries=10
+                verbose=(batch_start == 0)  # Only show example on first batch
             )
+            batch_time = time.time() - batch_start_time
+            logger.info(f"Batch inference completed in {batch_time:.2f} seconds ({batch_time/len(current_batch):.2f} seconds per item)")
             
-            # Initialize thinking variable to avoid undefined error
-            thinking = None
-            
-            # Process API result - check if it's deepseek-r1 model
-            if client_info["model_type"] in ["deepseek-r1", "deepseek-r1-inner"]:
-                # deepseek-r1 returns three values: success flag, answer content and reasoning content
-                success, answer, thinking = api_result
-            else:
-                # Other models return two values: success flag and answer content
-                success, answer = api_result
-
-            if not success:
-                raise Exception(f"API call failed: {answer}")
-            
-            # Calculate API call time
-            call_time = time.time() - call_start
-            
-            # Process returned response - extract token usage
-            token_info = {}
-            if client_info["model_type"] == "openai" and hasattr(answer, 'usage'):
-                token_info = {
-                    "completion_tokens": getattr(answer.usage, 'completion_tokens', 'N/A'),
-                    "prompt_tokens": getattr(answer.usage, 'prompt_tokens', 'N/A'),
-                    "total_tokens": getattr(answer.usage, 'total_tokens', 'N/A')
+            # Process each response
+            for i, (item, response) in enumerate(zip(current_batch, responses)):
+                # Record start time for processing this item
+                item_start_time = time.time()
+                
+                # Extract item information
+                item_id = item.get("id", f"item-{i+batch_start}")
+                question = item.get("question", "")
+                expected_answer = item.get("answer", [])
+                
+                # Calculate current item index in overall dataset
+                global_item_index = batch_start + i + 1
+                
+                logger.info(f"Processing item {global_item_index}/{len(remaining_items)}... [ID: {item_id}]")
+                
+                # Extract final answer
+                final_answer = extract_final_answer(response)
+                
+                # Check if answer is correct
+                is_correct, checked_answer = check_answer_correctness(final_answer, expected_answer)
+                if is_correct:
+                    correct_count += 1
+                
+                # Calculate processing time
+                item_time = time.time() - item_start_time
+                
+                # Log detailed information
+                logger.info(f"Question: {question}")
+                logger.info(f"Expected answer: {expected_answer}")
+                logger.info(f"Model answer: {final_answer}")
+                logger.info(f"Is correct: {is_correct}")
+                logger.info(f"Processing time: {item_time:.6f} seconds")
+                logger.info("-" * 50)
+                
+                # Build result object
+                result = {
+                    "id": item_id,
+                    "question": question,
+                    "prompt": prompts[i],
+                    "model_answer": final_answer,
+                    "full_response": response,
+                    "expected_answer": expected_answer,
+                    "is_correct": is_correct,
+                    "processing_time": item_time
                 }
-                # Extract answer content
-                answer = answer.choices[0].message.content
-            else:
-                token_info = {"note": "This model type does not provide token usage statistics"}
+                
+                results.append(result)
+                success_count += 1
+                
+                # Save intermediate results every 5 items
+                if (global_item_index % 500 == 0):
+                    # Calculate current accuracy
+                    current_accuracy = correct_count / (batch_start + i + 1 + start_from) if (batch_start + i + 1 + start_from) > 0 else 0
+                    
+                    # Add evaluation metrics to the intermediate results
+                    evaluation_metrics = {
+                        "total_questions": len(test_data),
+                        "processed_examples": len(results),
+                        "correct_answers": correct_count,
+                        "accuracy": current_accuracy,
+                        "error_count": error_count
+                    }
+                    
+                    final_output = {
+                        "results": results,
+                        "metrics": evaluation_metrics
+                    }
+                    
+                    with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+                        json.dump(final_output, f, ensure_ascii=False, indent=2)
+                    logger.info(f"Saved intermediate results - {len(results)}/{len(test_data)} items processed")
             
-            # Try to extract final answer
-            final_answer = extract_final_answer(answer)
+            # Save batch results after completion
+            current_accuracy = correct_count / (len(results)) if len(results) > 0 else 0
             
-            # Check if answer is correct
-            is_correct, checked_answer = check_answer_correctness(final_answer, expected_answer)
-            if is_correct:
-                correct_count += 1
-            
-            # Build result object
-            result = {
-                "id": item_id,
-                "question": question,
-                "prompt": prompt,
-                "model_answer": final_answer,
-                "full_response": answer,
-                "expected_answer": expected_answer,
-                "is_correct": is_correct,
-                "processing_time": call_time,
-                "token_usage": token_info
+            evaluation_metrics = {
+                "total_questions": len(test_data),
+                "processed_examples": len(results),
+                "correct_answers": correct_count,
+                "accuracy": current_accuracy,
+                "error_count": error_count
             }
             
-            # Add thinking content field (for deepseek-r1 model)
-            if thinking is not None:
-                result["reasoning"] = thinking
-                logger.info(f"Model reasoning process: {thinking}")
+            final_output = {
+                "results": results,
+                "metrics": evaluation_metrics
+            }
             
-            results.append(result)
-            success_count += 1
-            
-            # Log detailed information
-            logger.info(f"Question: {question}")
-            logger.info(f"Expected answer: {expected_answer}")
-            logger.info(f"Model answer: {final_answer}")
-            logger.info(f"Is correct: {is_correct}")
-            logger.info(f"Processing time: {call_time:.2f} seconds")
-            logger.info(f"Token usage: {token_info}")
-            logger.info("-" * 50)
-            
+            with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+                json.dump(final_output, f, ensure_ascii=False, indent=2)
+                
         except Exception as e:
             error_count += 1
-            logger.error(f"Error processing item {i+1}: {e}")
-            # Record error information
-            result = {
-                "id": item_id,
-                "question": question,
-                "expected_answer": expected_answer,
-                "model_answer": f"Processing error: {str(e)}",
-                "is_correct": False,
-                "error": str(e)
-            }
-            results.append(result)
-        
-        # Save intermediate results every 5 items or when error occurs
-        if (i + 1) % 5 == 0 or error_count > 0:
-            try:
-                with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
-                    json.dump(results, f, ensure_ascii=False, indent=2)
-                logger.info(f"Saved intermediate results ({i+1}/{len(test_data)})")
-            except Exception as e:
-                logger.error(f"Failed to save intermediate results: {e}")
+            logger.error(f"Error processing batch: {e}")
+            # Save what we have so far
+            with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+                json.dump({"results": results}, f, ensure_ascii=False, indent=2)
     
-    # Calculate accuracy
+    # Calculate final accuracy
     accuracy = correct_count / len(test_data) if len(test_data) > 0 else 0
     
-    # Save results to JSON file
+    # Save final results to JSON file
     try:
         # Sort results by ID before saving
         results.sort(key=lambda x: x.get("id", ""))
@@ -366,31 +462,40 @@ def process_hitab_data(input_file, output_file, model_name, log_file, max_tokens
     logger.info(f"Processing failures: {error_count}/{len(test_data)}")
     logger.info(f"Correct answers: {correct_count}/{len(test_data)}")
     logger.info(f"Accuracy: {accuracy*100:.2f}%")
+    average_time_per_item = total_time / len(remaining_items) if len(remaining_items) > 0 else 0
+    logger.info(f"Average processing time per item: {average_time_per_item:.2f} seconds")
     logger.info("=" * 60)
 
 
-
 def parse_arguments():
-    parser = argparse.ArgumentParser(description='Process HiTAB dataset with LLM')
+    parser = argparse.ArgumentParser(description='Process HiTAB dataset with VLLM batch inference')
     
-    parser.add_argument('--api_port', type=int, default=8000, help='API port for local model server')
-    parser.add_argument('--output_file', type=str, help='Path to save results')
-    parser.add_argument('--model_path', type=str, help='Model path or identifier')
-    parser.add_argument('--log_file', type=str, help='Path to log file')
-    parser.add_argument('--temperature', type=float, default=0.7, help='Temperature for model generation')
+    parser.add_argument('--output_file', type=str,  help='Path to save results')
+    parser.add_argument('--model_path', type=str,  help='Model path or identifier')
+    parser.add_argument('--log_file', type=str,  help='Path to log file')
+    parser.add_argument('--temperature', type=float, default=0.0, help='Temperature for model generation')
     parser.add_argument('--max_tokens', type=int, default=4096, help='Maximum tokens for model output')
+    parser.add_argument('--tensor_parallel_size', type=int, default=2, help='Tensor parallelism size')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for inference')
     parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
     parser.add_argument('--base_path', type=str, help='Base path for the project')
     
     return parser.parse_args()
+
 
 def main():
     # 解析命令行参数
     args = parse_arguments()
     
     # 处理 base_path
+    base_path = None
     if args.base_path and os.path.exists(args.base_path):
         base_path = args.base_path
+    else:
+        # Try to find base path automatically
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if os.path.basename(current_dir) == "tests":
+            base_path = os.path.dirname(current_dir)
     
     if not base_path:
         print("Error: Unable to find project root directory")
@@ -401,21 +506,37 @@ def main():
     # 设置文件路径
     input_file = os.path.join(base_path, "data/HiTab/test.jsonl")
     
-    # 使用命令行参数，如果提供了参数则使用参数值
+    # 使用命令行参数，如果提供了参数则使用参数值，否则使用默认值
     output_file = args.output_file
-    model_name = args.model_path
+    model_path = args.model_path
     log_file = args.log_file
+    
+    # 使用命令行参数的最大token数
     max_tokens = args.max_tokens
+    
+    # 使用命令行参数的起始索引
     start_from = args.start_from
+    
+    # 使用命令行参数的温度值
     temperature = args.temperature
-    api_port = args.api_port
     
     # 确保输出目录和日志目录存在
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     
     # 处理数据
-    process_hitab_data(input_file, output_file, model_name, log_file, max_tokens, temperature, start_from, api_port)
+    process_hitab_data_batch(
+        input_file=input_file, 
+        output_file=output_file, 
+        model_path=model_path, 
+        log_file=log_file, 
+        max_tokens=max_tokens,
+        temperature=temperature,
+        tensor_parallel_size=args.tensor_parallel_size,
+        batch_size=args.batch_size,
+        start_from=start_from
+    )
+
 
 if __name__ == "__main__":
     main()
