@@ -106,6 +106,24 @@ You should think step-by-step to reach the final answer.
 Your response should end with `Answer: xxx` (answer to the question).
 """
 
+COT_PROMPT_FINQA_TEMPLATE = """Below is an instruction that describes a question answering task in the finance domain, provided with an input table and relevant text as context. 
+Please answer the given question based on the table and text.
+
+### Instruction
+Given a table and a list of texts in the following, what is the answer to the question?
+You should think step-by-step to reach the final answer.
+
+### pre_text:
+{pre_text}
+### Table:
+{table}
+### post_text:
+{post_text}
+### Question:
+{question}
+### Response
+Your response should end with `Answer: xxx` (answer to the question).
+"""
 
 COT_PROMPT_SCITAB_TEMPLATE = """
 ## Task:
@@ -118,6 +136,19 @@ You should think step-by-step to reach the final answer.
 ###  Claim:
 {claim}
 
+### Response
+Your response should end with `Answer: xxx` (answer to the question).
+"""
+
+COT_PROMPT_OTTQA_TEMPLATE = """Please answer the given question based on the table and text. You should reach a short-form answer after reasoning.
+Given a table and a list of texts in the following, what is the answer to the question?
+You should think step-by-step to reach the final answer.
+### Table:
+{table}
+### Text:
+{text}
+### Question:
+{question}
 ### Response
 Your response should end with `Answer: xxx` (answer to the question).
 """
