@@ -52,6 +52,97 @@
 
 # echo "Testing and evaluation completed successfully!"
 
+
+# export DASHSCOPE_FANGYU_API_KEY=sk-4d550aacd7bf474d81e1c07b268c9615
+# # ===================== 参数读取 ============================
+# MODEL_PATH="/mnt/usercache/huggingface/Qwen2.5-3B-Instruct"   # 推理模型路径
+# EVAL_MODEL_PATH="claude-3-7-sonnet-20250219" #"/mnt/usercache/huggingface/Qwen2.5-7B-Instruct"  # 评估模型路径（用于LLM评估）
+# TASK_NAME="wikitq"  # 任务名，比如 tatqa, wikitq
+# TRAIN_TYPE="base"  # 训练方式，比如 grpo、ppo、sft
+# MODEL_SIZE="3b"    # 模型大小，比如 3b、7b
+# TENSOR_PARALLEL_SIZE=2  # 张量并行大小，为了与注意力头数量匹配
+# BATCH_SIZE=256     # 批处理大小
+# MAX_TOKENS=4096     # 模型生成的最大token数
+# USE_LLM_EVAL=true  # 是否使用LLM评估 (true/false)
+# LLM_EVAL_BATCH_SIZE=50  # LLM评估批大小
+
+# # ===================== 路径配置 ============================
+# BASE_PATH="$(pwd)"  # 使用当前目录作为基础路径
+# INFER_SCRIPT="${BASE_PATH}/tests/${TASK_NAME}.py"
+
+# # 根据是否使用LLM评估选择不同的评估脚本路径
+# if [ "$USE_LLM_EVAL" = true ]; then
+#   EVAL_SCRIPT="${BASE_PATH}/tests/llm_eval/${TASK_NAME}_eval.py"
+# else
+#   EVAL_SCRIPT="${BASE_PATH}/tests/eval/${TASK_NAME}_eval.py"
+# fi
+
+# # 自动生成输出文件路径
+# PRED_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}.json"
+# INFER_LOG="${BASE_PATH}/results/${TASK_NAME}/logs/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_infer.log"
+
+# # 评估输出路径根据评估类型区分
+# if [ "$USE_LLM_EVAL" = true ]; then
+#   EVAL_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_llm_eval_results.json"
+#   EVAL_LOG="${BASE_PATH}/results/${TASK_NAME}/logs/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_llm_eval.log"
+# else
+#   EVAL_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_eval_results.json"
+# fi
+
+# # 确保输出目录存在
+# mkdir -p "$(dirname "$PRED_OUTPUT")"
+# mkdir -p "$(dirname "$INFER_LOG")"
+# mkdir -p "$(dirname "$EVAL_OUTPUT")"
+
+# # ===================== 运行推理 ============================
+# echo "Running inference with VLLM..."
+# python "$INFER_SCRIPT" \
+#     --model_path "$MODEL_PATH" \
+#     --output_file "$PRED_OUTPUT" \
+#     --log_file "$INFER_LOG" \
+#     --base_path "$BASE_PATH" \
+#     --tensor_parallel_size $TENSOR_PARALLEL_SIZE \
+#     --batch_size $BATCH_SIZE \
+#     --max_tokens $MAX_TOKENS \
+#     --temperature 0.0
+
+# if [ $? -ne 0 ]; then
+#   echo "Inference failed"
+#   exit 1
+# fi
+
+# # ===================== 运行评估 ============================
+# echo "Running evaluation..."
+
+# if [ "$USE_LLM_EVAL" = true ]; then
+#   # 使用LLM评估
+#   echo "Using LLM-based evaluation with model: $EVAL_MODEL_PATH"
+#   python "$EVAL_SCRIPT" \
+#       --results_file "$PRED_OUTPUT" \
+#       --output_file "$EVAL_OUTPUT" \
+#       --model_path "$EVAL_MODEL_PATH" \
+#       --log_file "$EVAL_LOG" \
+#       --base_path "$BASE_PATH" \
+#       --batch_size $LLM_EVAL_BATCH_SIZE \
+#       --tensor_parallel_size $TENSOR_PARALLEL_SIZE
+# else
+#   # 使用常规评估
+#   echo "Using standard evaluation"
+#   python "$EVAL_SCRIPT" \
+#       --results_file "$PRED_OUTPUT" \
+#       --output_file "$EVAL_OUTPUT" \
+#       --base_path "$BASE_PATH" 
+# fi
+
+# if [ $? -ne 0 ]; then
+#   echo "Evaluation failed"
+#   exit 1
+# fi
+
+# echo "Testing and evaluation completed successfully!"
+
+
+
 export DASHSCOPE_FANGYU_API_KEY=sk-4d550aacd7bf474d81e1c07b268c9615
 # ===================== 参数读取 ============================
 MODEL_PATH="/mnt/usercache/huggingface/Qwen2.5-3B-Instruct"   # 推理模型路径
@@ -62,18 +153,20 @@ MODEL_SIZE="3b"    # 模型大小，比如 3b、7b
 TENSOR_PARALLEL_SIZE=2  # 张量并行大小，为了与注意力头数量匹配
 BATCH_SIZE=256     # 批处理大小
 MAX_TOKENS=4096     # 模型生成的最大token数
-USE_LLM_EVAL=true  # 是否使用LLM评估 (true/false)
+EVAL_MODE="combined"   # 评估模式: standard(标准精确匹配), llm(仅LLM评估), combined(组合评估，先em再llm)
 LLM_EVAL_BATCH_SIZE=50  # LLM评估批大小
 
 # ===================== 路径配置 ============================
 BASE_PATH="$(pwd)"  # 使用当前目录作为基础路径
 INFER_SCRIPT="${BASE_PATH}/tests/${TASK_NAME}.py"
 
-# 根据是否使用LLM评估选择不同的评估脚本路径
-if [ "$USE_LLM_EVAL" = true ]; then
-  EVAL_SCRIPT="${BASE_PATH}/tests/llm_eval/${TASK_NAME}_eval.py"
-else
+# 根据评估模式选择不同的评估脚本路径
+if [ "$EVAL_MODE" = "standard" ]; then
   EVAL_SCRIPT="${BASE_PATH}/tests/eval/${TASK_NAME}_eval.py"
+elif [ "$EVAL_MODE" = "llm" ]; then
+  EVAL_SCRIPT="${BASE_PATH}/tests/llm_eval/${TASK_NAME}_eval.py"
+else  # combined
+  EVAL_SCRIPT="${BASE_PATH}/tests/llm_eval/${TASK_NAME}_combined_eval.py"
 fi
 
 # 自动生成输出文件路径
@@ -81,11 +174,14 @@ PRED_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAI
 INFER_LOG="${BASE_PATH}/results/${TASK_NAME}/logs/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_infer.log"
 
 # 评估输出路径根据评估类型区分
-if [ "$USE_LLM_EVAL" = true ]; then
+if [ "$EVAL_MODE" = "standard" ]; then
+  EVAL_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_eval_results.json"
+elif [ "$EVAL_MODE" = "llm" ]; then
   EVAL_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_llm_eval_results.json"
   EVAL_LOG="${BASE_PATH}/results/${TASK_NAME}/logs/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_llm_eval.log"
-else
-  EVAL_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_eval_results.json"
+else  # combined
+  EVAL_OUTPUT="${BASE_PATH}/results/${TASK_NAME}/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_combined_eval_results.json"
+  EVAL_LOG="${BASE_PATH}/results/${TASK_NAME}/logs/${TASK_NAME}_${MODEL_SIZE}_${TRAIN_TYPE}_combined_eval.log"
 fi
 
 # 确保输出目录存在
@@ -111,9 +207,16 @@ if [ $? -ne 0 ]; then
 fi
 
 # ===================== 运行评估 ============================
-echo "Running evaluation..."
+echo "Running evaluation with mode: $EVAL_MODE..."
 
-if [ "$USE_LLM_EVAL" = true ]; then
+if [ "$EVAL_MODE" = "standard" ]; then
+  # 使用常规评估
+  echo "Using standard evaluation"
+  python "$EVAL_SCRIPT" \
+      --results_file "$PRED_OUTPUT" \
+      --output_file "$EVAL_OUTPUT" \
+      --base_path "$BASE_PATH" 
+elif [ "$EVAL_MODE" = "llm" ]; then
   # 使用LLM评估
   echo "Using LLM-based evaluation with model: $EVAL_MODEL_PATH"
   python "$EVAL_SCRIPT" \
@@ -124,13 +227,18 @@ if [ "$USE_LLM_EVAL" = true ]; then
       --base_path "$BASE_PATH" \
       --batch_size $LLM_EVAL_BATCH_SIZE \
       --tensor_parallel_size $TENSOR_PARALLEL_SIZE
-else
-  # 使用常规评估
-  echo "Using standard evaluation"
+else  # combined
+  # 使用组合评估
+  echo "Using combined evaluation (exact match + LLM) with model: $EVAL_MODEL_PATH"
   python "$EVAL_SCRIPT" \
       --results_file "$PRED_OUTPUT" \
       --output_file "$EVAL_OUTPUT" \
-      --base_path "$BASE_PATH" 
+      --model_path "$EVAL_MODEL_PATH" \
+      --log_file "$EVAL_LOG" \
+      --base_path "$BASE_PATH" \
+      --batch_size $LLM_EVAL_BATCH_SIZE \
+      --tensor_parallel_size $TENSOR_PARALLEL_SIZE \
+      --evaluation_mode "combined"
 fi
 
 if [ $? -ne 0 ]; then
