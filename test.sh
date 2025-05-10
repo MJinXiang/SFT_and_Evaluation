@@ -52,10 +52,10 @@
 
 # echo "Testing and evaluation completed successfully!"
 
-
+export DASHSCOPE_FANGYU_API_KEY=sk-4d550aacd7bf474d81e1c07b268c9615
 # ===================== 参数读取 ============================
 MODEL_PATH="/mnt/usercache/huggingface/Qwen2.5-3B-Instruct"   # 推理模型路径
-EVAL_MODEL_PATH="/mnt/usercache/huggingface/Qwen2.5-7B-Instruct"  # 评估模型路径（用于LLM评估）
+EVAL_MODEL_PATH="claude-3-7-sonnet-20250219" #"/mnt/usercache/huggingface/Qwen2.5-7B-Instruct"  # 评估模型路径（用于LLM评估）
 TASK_NAME="wikitq"  # 任务名，比如 tatqa, wikitq
 TRAIN_TYPE="base"  # 训练方式，比如 grpo、ppo、sft
 MODEL_SIZE="3b"    # 模型大小，比如 3b、7b
@@ -63,7 +63,7 @@ TENSOR_PARALLEL_SIZE=2  # 张量并行大小，为了与注意力头数量匹配
 BATCH_SIZE=256     # 批处理大小
 MAX_TOKENS=4096     # 模型生成的最大token数
 USE_LLM_EVAL=true  # 是否使用LLM评估 (true/false)
-LLM_EVAL_BATCH_SIZE=128  # LLM评估批大小
+LLM_EVAL_BATCH_SIZE=50  # LLM评估批大小
 
 # ===================== 路径配置 ============================
 BASE_PATH="$(pwd)"  # 使用当前目录作为基础路径
