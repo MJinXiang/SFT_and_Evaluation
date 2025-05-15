@@ -127,6 +127,34 @@ def prepare_model_results(model_results_file):
     
     return results
 
+def prepare_reference_from_results(model_results_file):
+    """从模型结果文件中准备参考答案数据"""
+    with open(model_results_file, 'r', encoding='utf-8') as f:
+        model_results = json.load(f)
+    
+    # 构建问题ID到黄金答案的映射
+    reference = {"reference": {}, "table": [], "passage": []}
+    
+    for item in model_results:
+        question_id = item["question_id"]
+        reference["reference"][question_id] = item.get("grouth_answer", "")  # 从结果中获取真实答案
+        
+        # 如果有目标类型信息，用来分类表格或者段落问题
+        if "target" in item and item.get("target") and len(item["target"]) > 2:
+            if item["target"][2] is not None:  # 如果有链接，则是passage
+                reference["passage"].append(question_id)
+            else:
+                reference["table"].append(question_id)
+        # 如果没有目标类型信息，根据结果中的其他字段推断
+        elif "relevant_links" in item and item.get("relevant_links"):
+            # 如果有相关链接，则这是一个混合/段落问题
+            reference["passage"].append(question_id)
+        else:
+            # 默认为表格类型
+            reference["table"].append(question_id)
+    
+    return reference
+
 def prepare_test_answers(test_answers_file):
     """准备测试答案数据"""
     with open(test_answers_file, 'r', encoding='utf-8') as f:
@@ -155,7 +183,8 @@ def prepare_test_answers(test_answers_file):
 
 
 def get_raw_scores(model_results, reference):
-    """计算精确匹配和F1分数，只计算在模型结果和测试答案中都存在的问题ID"""
+    """计算精确匹配和F1分数"""
+    # 保持原有的评分逻辑
     exact_scores = {}
     f1_scores = {}
     
@@ -205,10 +234,10 @@ def get_raw_scores(model_results, reference):
     # 添加额外信息
     return collections.OrderedDict(
         [
-            # ("table exact", table_exact),
-            # ("table f1", table_f1),
-            # ("passage exact", passage_exact),
-            # ("passage f1", passage_f1),
+            ("table exact", table_exact),
+            ("table f1", table_f1),
+            ("passage exact", passage_exact),
+            ("passage f1", passage_f1),
             ("total em", total_exact),
             ("total f1", total_f1),
             ("total", total),                       # 实际评估的问题总数
@@ -220,6 +249,7 @@ def get_raw_scores(model_results, reference):
 
 def create_eval_format(model_results_file, output_file):
     """创建符合评估格式的输出文件"""
+    # 保持原有的实现
     with open(model_results_file, 'r', encoding='utf-8') as f:
         model_results = json.load(f)
     
@@ -237,7 +267,7 @@ def create_eval_format(model_results_file, output_file):
     print(f"评估格式文件已保存到: {output_file}")
 
 
-def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, create_eval_format_flag=True):
+def evaluate_model(model_results_file, evaluate_save_dir, create_eval_format_flag=True):
     """评估模型结果"""
     
     # 如果需要创建评估格式文件
@@ -247,7 +277,7 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
     
     # 准备数据
     model_results = prepare_model_results(model_results_file)
-    reference = prepare_test_answers(test_answers_file)
+    reference = prepare_reference_from_results(model_results_file)  # 现在从模型结果中获取参考
     
     # 计算得分
     scores = get_raw_scores(model_results, reference)
@@ -255,17 +285,16 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
     # 输出结果
     print("\n==========OTTQA评估结果 ==========")
     print(f"模型结果文件: {model_results_file}")
-    print(f"测试答案文件: {test_answers_file}")
     print(f"评估保存目录: {evaluate_save_dir}")
     print(f"实际评估问题数: {scores['total']} / {scores['total_reference']}") # 显示实际评估/总问题数
     print("-" * 40)
     print(f"表格问题数量: {scores['table_count']}")
+    print(f"段落问题数量: {scores['passage_count']}")
     print(f"表格问题精确匹配: {scores['table exact']:.2f}%")
     print(f"表格问题F1分数: {scores['table f1']:.2f}%")
-    print(f"段落问题数量: {scores['passage_count']}")
     print(f"段落问题精确匹配: {scores['passage exact']:.2f}%")
     print(f"段落问题F1分数: {scores['passage f1']:.2f}%")
-    print(f"总体精确匹配: {scores['total exact']:.2f}%")
+    print(f"总体精确匹配: {scores['total em']:.2f}%")
     print(f"总体F1分数: {scores['total f1']:.2f}%")
     print("======================================\n")
     
@@ -279,18 +308,10 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
     # 为了快速查找，创建模型回答的字典
     model_results_dict = {item["question_id"]: item for item in full_model_results}
     
-    # 加载完整的测试答案以获取问题和真实答案
-    with open(test_answers_file, 'r', encoding='utf-8') as f:
-        full_test_answers = json.load(f)
-    
-    # 为了快速查找，创建测试答案的字典
-    test_answers_dict = {item["question_id"]: item for item in full_test_answers}
-    
     # 合并数据
     for qid in reference["reference"].keys():
-        if qid in model_results_dict and qid in test_answers_dict:
+        if qid in model_results_dict:
             model_item = model_results_dict[qid]
-            test_item = test_answers_dict[qid]
             
             # 判断答案是否正确
             gold_answer = reference["reference"][qid]
@@ -305,7 +326,7 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
             # 创建详细结果项
             detail_item = {
                 "question_id": qid,
-                "question": test_item.get("question", ""),
+                "question": model_item.get("question", ""),
                 "question_type": question_type,
                 "gold_answer": gold_answer,
                 "model_answer": cleaned_answer,
@@ -316,8 +337,8 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
             }
             
             # 添加目标信息（如果有）
-            if "target" in test_item:
-                detail_item["target"] = test_item["target"]
+            if "target" in model_item:
+                detail_item["target"] = model_item["target"]
             
             detailed_results.append(detail_item)
     
@@ -347,9 +368,7 @@ def main():
                        help='Path to save evaluation results')
     parser.add_argument('--base_path', type=str,
                        help='Base path for the project (default: /netcache/mengjinxiang/Project/LLaMA-Factory-main)')
-    parser.add_argument('--test_data', type=str, 
-                       default='data/hybridqa/test_answers.json',
-                       help='Path to test answers file (default maintained for reference)')
+   
     
     args = parser.parse_args()
     
@@ -357,14 +376,8 @@ def main():
         print(f"Error: Model results file does not exist: {args.results_file}")
         sys.exit(1)
     
-    if not os.path.exists(args.test_data):
-        print(f"Error: Test answers file does not exist: {args.test_data}")
-        sys.exit(1)
-
-    test_path = os.path.join(args.base_path, args.test_data) 
-    
     # Evaluate model results
-    evaluate_model(args.results_file, test_path, args.output_file)
+    evaluate_model(args.results_file, args.output_file)
 
 if __name__ == "__main__":
     main()

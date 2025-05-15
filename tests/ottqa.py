@@ -294,6 +294,7 @@ def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, m
                 # Extract item information
                 item_id = item.get("question_id", f"item-{i+batch_start}")
                 question = item.get("question", "")
+                grouth_answer = item.get("answer", "")
                 
                 # Calculate current item index
                 global_item_index = batch_start + i + 1
@@ -318,6 +319,7 @@ def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, m
                     "question": question,
                     "model_answer": response,
                     "extracted_answer": extracted_answer,
+                    "ground_answer": grouth_answer,
                     "processing_time": item_time
                 }
                 
@@ -328,11 +330,6 @@ def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, m
                 # Add to predictions dict for evaluation format
                 predictions[item_id] = extracted_answer
                 
-                # # Save intermediate results every 5 items
-                # if (global_item_index % 100 == 0):
-                #     with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
-                #         json.dump(results, f, ensure_ascii=False, indent=2)
-                #     logger.info(f"Saved intermediate results - {len(results)}/{len(data_items)} items processed")
             
             # Save batch results
             with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
@@ -353,23 +350,6 @@ def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, m
     except Exception as e:
         logger.error(f"Failed to save detailed results file: {e}")
     
-    # # Save evaluation format output (containing only question ID and prediction)
-    # eval_output_file = output_file.replace('.json', '_eval.json')
-    # try:
-    #     # Create data structure for evaluation format
-    #     eval_data = [
-    #         {
-    #             "question_id": qid,
-    #             "pred": pred
-    #         }
-    #         for qid, pred in predictions.items()
-    #     ]
-        
-    #     with open(eval_output_file, 'w', encoding='utf-8') as f:
-    #         json.dump(eval_data, f, ensure_ascii=False, indent=2)
-    #     logger.info(f"Evaluation format results saved to {eval_output_file}")
-    # except Exception as e:
-    #     logger.error(f"Failed to save evaluation format results: {e}")
 
     # Log summary information
     total_time = time.time() - start_time
