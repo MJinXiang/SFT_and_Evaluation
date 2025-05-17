@@ -43,7 +43,7 @@ class VLLMGenerator:
     A class for generating text using vLLM with support for different models.  
     """  
     
-    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+    def __init__(self, model_path, max_model_len=16384, tensor_parallel_size=1):  
         """  
         Initialize the VLLMGenerator with model and tokenizer.  
         """  
@@ -137,7 +137,7 @@ def format_paragraphs(paragraphs):
 
 
 def create_prompt_from_multhiertt(item):
-    """Create prompt for MultiHierTT item"""
+    """Create prompt for multihiertt item"""
     question = item.get("question", "")
 
     tables_str = format_tables_for_prompt(item.get("tables", {}))
@@ -183,12 +183,12 @@ def extract_answer_from_response(model_answer):
 
 def process_multhiertt_data_batch(input_file, output_file, model_path, log_file, max_tokens=2048, 
                              temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0):
-    """Process MultiHierTT dataset with batched VLLM inference"""
+    """Process multihiertt dataset with batched VLLM inference"""
     logger = setup_logger(log_file)
     
     # Record start time
     start_time = time.time()
-    logger.info(f"Started processing MultiHierTT data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info(f"Started processing multihiertt data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Input file: {input_file}")
     logger.info(f"Output file: {output_file}")
     logger.info(f"Using model: {model_path}")
@@ -198,7 +198,7 @@ def process_multhiertt_data_batch(input_file, output_file, model_path, log_file,
     try:
         generator = VLLMGenerator(
             model_path=model_path,
-            max_model_len=8192,
+            max_model_len=16384,
             tensor_parallel_size=tensor_parallel_size
         )
         logger.info(f"VLLM generator initialized successfully")
@@ -415,7 +415,7 @@ def main():
     print(f"Using root path: {base_path}")
     
     # 设置文件路径
-    input_file = os.path.join(base_path, "data/MultiHiertt/processed_test-dev_out_3_8.json")
+    input_file = os.path.join(base_path, "data/multihiertt/processed_test-dev_out_3_8.json")
     
     # 使用命令行参数，如果提供了参数则使用参数值，否则使用默认值
     output_file = args.output_file

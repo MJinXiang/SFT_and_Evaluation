@@ -197,7 +197,7 @@ def process_totto_data_batch(input_file, output_file, model_path, log_file, max_
     try:
         generator = VLLMGenerator(
             model_path=model_path,
-            max_model_len=8192,
+            max_model_len=16384,
             tensor_parallel_size=tensor_parallel_size
         )
         logger.info(f"VLLM generator initialized successfully")

@@ -47,7 +47,7 @@ class VLLMGenerator:
     A class for generating text using vLLM with support for different models.  
     """  
     
-    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+    def __init__(self, model_path, max_model_len=16384, tensor_parallel_size=1):  
         """  
         Initialize the VLLMGenerator with model and tokenizer.  
         """  
@@ -199,7 +199,7 @@ def process_fetaqa_data_batch(input_file, output_file, model_path, log_file, max
     try:
         generator = VLLMGenerator(
             model_path=model_path,
-            max_model_len=8192,
+            max_model_len=16384,
             tensor_parallel_size=tensor_parallel_size
         )
         logger.info(f"VLLM generator initialized successfully")

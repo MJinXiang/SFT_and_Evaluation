@@ -134,10 +134,10 @@ def prepare_reference_from_results(model_results_file):
     
     # 构建问题ID到黄金答案的映射
     reference = {"reference": {}, "table": [], "passage": []}
-    
+
     for item in model_results:
         question_id = item["question_id"]
-        reference["reference"][question_id] = item.get("grouth_answer", "")  # 从结果中获取真实答案
+        reference["reference"][question_id] = item.get("ground_answer", "")  # 从结果中获取真实答案
         
         # 如果有目标类型信息，用来分类表格或者段落问题
         if "target" in item and item.get("target") and len(item["target"]) > 2:
@@ -190,7 +190,7 @@ def get_raw_scores(model_results, reference):
     
     # 找出在模型结果中实际存在的问题ID
     evaluated_qids = set(example['question_id'] for example in model_results)
-    
+
     # 按照实际评估的问题ID过滤参考答案
     filtered_reference = {
         "reference": {k: v for k, v in reference['reference'].items() if k in evaluated_qids},
@@ -278,7 +278,7 @@ def evaluate_model(model_results_file, evaluate_save_dir, create_eval_format_fla
     # 准备数据
     model_results = prepare_model_results(model_results_file)
     reference = prepare_reference_from_results(model_results_file)  # 现在从模型结果中获取参考
-    
+
     # 计算得分
     scores = get_raw_scores(model_results, reference)
     
@@ -307,7 +307,7 @@ def evaluate_model(model_results_file, evaluate_save_dir, create_eval_format_fla
     
     # 为了快速查找，创建模型回答的字典
     model_results_dict = {item["question_id"]: item for item in full_model_results}
-    
+
     # 合并数据
     for qid in reference["reference"].keys():
         if qid in model_results_dict:

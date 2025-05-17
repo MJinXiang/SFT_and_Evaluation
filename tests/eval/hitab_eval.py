@@ -19,7 +19,7 @@ def process_result_file(results_file: str) -> Dict[str, Dict]:
         results = results_data["results"]
     else:
         results = results_data
-    
+
     processed_results = {}
     for item in results:
         if "id" not in item:
@@ -151,7 +151,7 @@ def evaluate(results_dict: Dict[str, Dict]) -> Tuple[float, List[Dict]]:
         total += 1
         model_answer = item["model_answer"]
         expected_answer = item["expected_answer"]
-        
+
         # Check if model answer matches any of the expected answers
         is_correct = match_values(model_answer, expected_answer)
         
@@ -222,7 +222,7 @@ def main():
                         help='Base path for the project (optional)')
     
     args = parser.parse_args()
-    
+
     # Process the results file
     results_dict = process_result_file(args.results_file)
     

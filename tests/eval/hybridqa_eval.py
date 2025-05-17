@@ -248,6 +248,8 @@ def evaluate_model(model_results_file, test_answers_file, evaluate_save_dir, cre
     if create_eval_format_flag:
         output_file = os.path.splitext(model_results_file)[0] + "_eval_format.json"
         create_eval_format(model_results_file, output_file)
+
+    # import pdb; pdb.set_trace()
     
     # 准备数据
     model_results = prepare_model_results(model_results_file)
