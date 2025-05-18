@@ -29,6 +29,61 @@ Question:
 
 """
 
+COT_PROMPT_TABLEBENCH_TEMPLATE = """
+Based on the table below, please answer the question, the answer should be short and simple. It can be a number, a word, or a phrase in the table, but not a full sentence.
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
+
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>here is your answer</answer>
+
+#Task:
+
+Table:
+{table}
+
+Question: {question} 
+"""
+
+COT_PROMPT_AITQA_TEMPLATE = """
+Based on the table below, please answer the question, the answer should be short and simple. It can be a number, a word, or a phrase in the table, but not a full sentence.
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
+
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>here is your answer</answer>
+
+#Task:
+
+## Table Structure Information
+Column Headers:
+{column_headers}
+
+Row Headers:
+{row_headers}
+
+# Table:
+{table}
+
+# Question: {question} 
+"""
+
 
 COT_PROMPT_WIKISQL_TEMPLATE = """## Objective
 You are provided with a table and a question related to the table.

@@ -14,7 +14,7 @@ from tqdm import tqdm
 from utils.parser import extract_program
 import pandas as pd
 import numpy as np
-from prompt import COT_PROMPT_TABLEBENCH_TEMPLATE,COT_PROMPT_TATQA_TEMPLATE
+from prompt import COT_PROMPT_AITQA_TEMPLATE, COT_PROMPT_TEMPLATE
 
 # pd.set_option('display.expand_frame_repr', False)
 # pd.set_option('display.max_rows', 8)
@@ -121,7 +121,7 @@ class APIGenerator(BaseGenerator):
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 top_p=self.top_p,
-                max_retries=5
+                max_retries=10
             )
             
             if not success:
@@ -293,42 +293,136 @@ def prepare_wo_ex_item(item, few_shot_prompts):
     return item
 
 
-def prepare_markdown_item(item, markdown_prompts):
-    """为TABLEBENCH任务准备项目，使用原始表格格式"""
-    # 检查数据格式并提取必要信息
+# def prepare_markdown_item(item, markdown_prompts=None):
+#     """为 TABLEBENCH 任务准备 markdown 项目，支持 column_header + row_header 表格结构"""
+#     table_data = None
+#     column_header = []
+#     row_header = []
+#     question = None
+
+#     # 解析表格数据
+#     if "table" in item:
+#         table = item["table"]
+#         if isinstance(table, dict):
+#             column_header = table.get("column_header", [])
+#             row_header = table.get("row_header", [])
+#             table_data = table.get("data", [])
+#         elif isinstance(table, list):
+#             table_data = table
+#         elif isinstance(table, dict) and "table" in table:
+#             table_data = table["table"]
+
+#     # 解析问题文本
+#     if "question" in item:
+#         question = item["question"]
+#     elif "question_item" in item and "question" in item["question_item"]:
+#         question = item["question_item"]["question"]
+
+#     # 处理列标题（提取每列的标签）
+#     if column_header and isinstance(column_header[0], list):
+#     # 合并每个子列表中的元素，如 ["Increase (decrease) from 2018 (a):", "Domestic"] 
+#     # 变为 "Increase (decrease) from 2018 (a): Domestic"
+#         columns = [f"{col[0]} {col[1]}" if len(col) > 1 else col[0] for col in column_header]
+#     else:
+#         columns = column_header
+#     # if column_header and isinstance(column_header[0], list):
+#     #     columns = [col[0] for col in column_header]
+#     # else:
+#     #     columns = column_header
+
+#     # 如果 row_header 存在，插入 row_header 列标题
+#     if row_header and isinstance(row_header[0], list):
+#         columns = ["Row Header"] + columns
+#         # 合并 row_header 和 data 行
+#         full_data = []
+#         for rh, row in zip(row_header, table_data):
+#             row_label = " / ".join(rh)
+#             full_data.append([row_label] + row)
+#     else:
+#         full_data = table_data
+
+#     # 构建 Markdown 表格字符串
+#     table_str = ""
+#     if columns:
+#         table_str += " | ".join(columns) + "\n"
+#         table_str += " | ".join(["---"] * len(columns)) + "\n"
+#     if full_data:
+#         for row in full_data:
+#             table_str += " | ".join(str(cell) for cell in row) + "\n"
+
+#     # 生成提示
+#     prompt = markdown_prompts.format(
+#         table=table_str,
+#         question=question
+#     )
+
+#     # 创建新的结果对象
+#     result = item.copy()
+#     result["prompt"] = prompt
+#     result["df"] = None  # 不使用DataFrame
+#     return result
+
+def prepare_markdown_item(item, markdown_prompts=None):
+    """为 TABLEBENCH 任务准备 markdown 项目，支持 column_header + row_header 表格结构"""
     table_data = None
+    column_header = []
+    row_header = []
     question = None
 
-    # 处理表格数据 - 支持多种格式
-    # 处理表格数据
+    # 解析表格数据
     if "table" in item:
         table = item["table"]
-        if isinstance(table, dict) and "columns" in table and "data" in table:
-            columns = table["columns"]
-            table_data = table["data"]
+        if isinstance(table, dict):
+            column_header = table.get("column_header", [])
+            row_header = table.get("row_header", [])
+            table_data = table.get("data", [])
         elif isinstance(table, list):
-            table_data = table  # fallback: 直接使用二维表
+            table_data = table
         elif isinstance(table, dict) and "table" in table:
             table_data = table["table"]
 
-    # 处理问题
+    # 解析问题文本
     if "question" in item:
         question = item["question"]
     elif "question_item" in item and "question" in item["question_item"]:
         question = item["question_item"]["question"]
 
-    # 构造表格 markdown 字符串
+    # 格式化原始表头信息，用于在提示中展示
+    column_headers_str = json.dumps(column_header, indent=2) if column_header else "[]"
+    row_headers_str = json.dumps(row_header, indent=2) if row_header else "[]"
+
+    # 处理列标题（提取每列的标签）
+    if column_header and isinstance(column_header[0], list):
+        # 合并每个子列表中的元素
+        columns = [f"{col[0]} {col[1]}" if len(col) > 1 else col[0] for col in column_header]
+    else:
+        columns = column_header
+
+    # 如果 row_header 存在，插入 row_header 列标题
+    if row_header and isinstance(row_header[0], list):
+        columns = ["Row Header"] + columns
+        # 合并 row_header 和 data 行
+        full_data = []
+        for rh, row in zip(row_header, table_data):
+            row_label = " / ".join(rh)
+            full_data.append([row_label] + row)
+    else:
+        full_data = table_data
+
+    # 构建 Markdown 表格字符串
     table_str = ""
     if columns:
         table_str += " | ".join(columns) + "\n"
         table_str += " | ".join(["---"] * len(columns)) + "\n"
-    if table_data:
-        for row in table_data:
-            table_str += " | ".join([str(cell) for cell in row]) + "\n"
+    if full_data:
+        for row in full_data:
+            table_str += " | ".join(str(cell) for cell in row) + "\n"
 
     # 生成提示
     prompt = markdown_prompts.format(
         table=table_str,
+        column_headers=column_headers_str,
+        row_headers=row_headers_str,
         question=question
     )
 
@@ -337,8 +431,6 @@ def prepare_markdown_item(item, markdown_prompts):
     result["prompt"] = prompt
     result["df"] = None  # 不使用DataFrame
     return result
-
-
 
 def execute_with_dataframe(code, df):
     """执行给定的Python代码，提供DataFrame作为输入"""
@@ -453,11 +545,11 @@ def process_tablebench_data_batch(input_file, output_file, model_config, log_fil
                     for i, item in enumerate(remaining_items)]
     elif prompt_mode == "markdown":
         logger.info("Preparing items with markdown table format")
-        all_items = [(i, prepare_markdown_item(item, COT_PROMPT_TABLEBENCH_TEMPLATE)) 
+        all_items = [(i, prepare_markdown_item(item, COT_PROMPT_AITQA_TEMPLATE)) 
                     for i, item in enumerate(remaining_items)]
     else:  # wo_execution
         logger.info("Preparing items without code execution")
-        all_items = [(i, prepare_wo_ex_item(item, COT_PROMPT_TATQA_TEMPLATE)) 
+        all_items = [(i, prepare_wo_ex_item(item, COT_PROMPT_TEMPLATE)) 
                     for i, item in enumerate(remaining_items)]
 
     
@@ -628,11 +720,9 @@ def process_tablebench_data_batch(input_file, output_file, model_config, log_fil
             
             item_uid = item.get("id", f"item-{i}")
             question = item.get("question", "")
-            gold_answer = item.get("answer", '')  
-            answer_type = item.get("answer_type", "")
-            answer_from = item.get("answer_from", "")
-            qtype = item.get("qtype", "")
-            scale = item.get("scale", "")
+            gold_answer = item.get("answers", [])  
+            type = item.get("type", "")
+           
             
             item_time = time.time() - item_start_time
 
@@ -657,10 +747,7 @@ def process_tablebench_data_batch(input_file, output_file, model_config, log_fil
                 "gold_answer": gold_answer,  # 将原始答案命名为gold_answer
                 "model_answer": extracted_answer,  # 提取的答案作为model_answer
                 "full_response": full_response,  # 完整响应
-                "answer_type": answer_type,
-                "answer_from": answer_from,
-                "scale": scale,
-                "qtype": qtype,
+                "type": type,
                 "processing_time": item_time,
                 "prompt": item.get("prompt", ""),  # 保存原始提示以便调试
                 "prompt_token_length": prompt_token_length,
@@ -754,12 +841,12 @@ def main():
     print(f"Using root path: {base_path}")
     
     # 设置文件路径
-    input_file = args.input_file if args.input_file else os.path.join(base_path, "data/tablebench/test.jsonl")
+    input_file = args.input_file if args.input_file else os.path.join(base_path, "data/aitqa/test.jsonl")
 
     # 加载few-shot提示
     global FEW_SHOT_PROMPTS
     try:
-        with open(os.path.join(base_path, "few_shots/table_r1_think_tatqa.md"), 'r', encoding='utf-8') as f:
+        with open(os.path.join(base_path, "few_shots/table_r1_think_tablebench.md"), 'r', encoding='utf-8') as f:
             FEW_SHOT_PROMPTS = f.read()
     except Exception as e:
         print(f"Warning: Could not load few-shot prompts: {e}")
