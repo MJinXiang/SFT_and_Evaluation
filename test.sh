@@ -153,7 +153,7 @@ MODEL_SIZE="3b"    # 模型大小，比如 3b、7b
 TENSOR_PARALLEL_SIZE=2  # 张量并行大小，为了与注意力头数量匹配
 BATCH_SIZE=256     # 批处理大小
 MAX_TOKENS=4096     # 模型生成的最大token数
-EVAL_MODE="combined"   # 评估模式: standard(标准精确匹配), llm(仅LLM评估), combined(组合评估，先em再llm)
+EVAL_MODE="standard"   # 评估模式: standard(标准精确匹配), llm(仅LLM评估), combined(组合评估，先em再llm)
 LLM_EVAL_BATCH_SIZE=50  # LLM评估批大小
 
 # ===================== 路径配置 ============================

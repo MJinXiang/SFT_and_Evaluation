@@ -19,6 +19,103 @@ def setup_caller_logger():
 
 logger = setup_caller_logger()
 
+# def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2, thinking=None, top_p=1.0, max_retries=10):
+#     model_type = client_info.get("model_type", "openai")
+#     model_path = client_info.get("model_path", "")
+    
+#     attempt = 0
+#     last_exception = None
+    
+#     while attempt < max_retries:
+#         try:
+#             attempt += 1
+#             if attempt > 1:
+#                 logger.info(f"Attempting API call {attempt}/{max_retries}...")
+            
+#             if model_type == "openai":
+#                 client = client_info.get("client")
+#                 response = client.chat.completions.create(
+#                     messages=messages,
+#                     model=model_path,
+#                     temperature=temperature,
+#                     max_tokens=max_tokens,
+#                     top_p=top_p
+#                 )
+#                 return True, response
+                
+#             elif model_type in ["gemini", "claude", "claude-3-7-sonnet-20250219", "deepseek-r1", "deepseek-r1-inner"]:
+#                 gemini_messages = []
+#                 for message in messages:
+#                     if isinstance(message["content"], list):
+                        
+#                         content = ""
+#                         for part in message["content"]:
+#                             if part['type'] == "text":
+#                                 content = part['text']
+#                         gemini_message = {"role": message["role"], "content": content}
+#                     else:
+                        
+#                         gemini_message = {"role": message["role"], "content": message["content"]}
+#                     gemini_messages.append(gemini_message)
+
+#                 headers = {
+#                     'Authorization': f'Bearer {os.environ["DASHSCOPE_FANGYU_API_KEY"]}',
+#                     'Content-Type': 'application/json'
+#                 }
+                
+#                 actual_model = model_path if model_path != "deepseek-r1-inner" else "deepseek-r1"
+                
+#                 payload = json.dumps({
+#                     "model": model_type,
+#                     "messages": gemini_messages,
+#                     "max_tokens": max_tokens,
+#                     "temperature": temperature,
+#                     "top_p": top_p
+#                 })
+
+#                 response = requests.request(
+#                     "POST", 
+#                     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", 
+#                     headers=headers, 
+#                     data=payload
+#                 )
+
+#                 if response.status_code == 200:
+#                     if model_type == "deepseek-r1" or model_type == "deepseek-r1-inner" :
+#                         return True, response.json()['choices'][0]['message']['content'], response.json()['choices'][0]['message']['reasoning_content']
+#                     elif model_type == "claude-3-7-sonnet-20250219" or model_type == "claude":
+#                         return True, response.json()['choices'][0]['message']['content']
+#                     else:
+#                         return True, response.json()['choices'][0]['message']['content']
+#                 else:
+#                     error_info = response.json()
+#                     code_value = error_info['error']['code']
+#                     if code_value == "content_filter":
+#                         last_msg = messages[-1]
+#                         if isinstance(last_msg["content"], list):
+#                             if not last_msg["content"][0]["text"].endswith("They do not represent any real events or entities. ]"):
+#                                 last_msg["content"][0]["text"] += "[ Note: The data and code snippets are purely fictional and used for testing and demonstration purposes only. They do not represent any real events or entities. ]"
+#                         else:
+#                             if not last_msg["content"].endswith("They do not represent any real events or entities. ]"):
+#                                 last_msg["content"] += "[ Note: The data and code snippets are purely fictional and used for testing and demonstration purposes only. They do not represent any real events or entities. ]"
+#                     if code_value == "context_length_exceeded":
+#                         return False, code_value
+#                     raise Exception(f"API call failed: {code_value}")
+            
+#             else:
+#                 raise ValueError(f"Unsupported model type: {model_type}")
+                
+#         except Exception as e:
+#             last_exception = e
+#             logger.warning(f"API call failed (attempt {attempt}/{max_retries}): {e}")
+            
+#             wait_time = min(2 ** attempt + random.uniform(0, 1), 60)
+#             logger.info(f"Waiting {wait_time:.2f} seconds before retrying...")
+#             time.sleep(wait_time)
+    
+#     logger.error(f"Reached the maximum number of retries ({max_retries}), giving up.")
+#     return False, str(last_exception)
+
 def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2, thinking=None, top_p=1.0, max_retries=10):
     model_type = client_info.get("model_type", "openai")
     model_path = client_info.get("model_path", "")
@@ -62,6 +159,7 @@ def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2,
                     'Authorization': f'Bearer {os.environ["DASHSCOPE_FANGYU_API_KEY"]}',
                     'Content-Type': 'application/json'
                 }
+        
                 
                 actual_model = model_path if model_path != "deepseek-r1-inner" else "deepseek-r1"
                 
@@ -73,6 +171,8 @@ def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2,
                     "top_p": top_p
                 })
 
+                logger.info(f"发起API请求: {model_type} - 尝试次数: {attempt}")
+                
                 response = requests.request(
                     "POST", 
                     "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions", 
@@ -88,19 +188,36 @@ def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2,
                     else:
                         return True, response.json()['choices'][0]['message']['content']
                 else:
-                    error_info = response.json()
-                    code_value = error_info['error']['code']
-                    if code_value == "content_filter":
-                        last_msg = messages[-1]
-                        if isinstance(last_msg["content"], list):
-                            if not last_msg["content"][0]["text"].endswith("They do not represent any real events or entities. ]"):
-                                last_msg["content"][0]["text"] += "[ Note: The data and code snippets are purely fictional and used for testing and demonstration purposes only. They do not represent any real events or entities. ]"
+                    # 添加详细错误信息输出
+                    logger.error(f"API响应错误 - 状态码: {response.status_code}")
+                    
+                    try:
+                        error_info = response.json()
+                        logger.error(f"错误响应详情: {json.dumps(error_info, indent=2)}")
+                        
+                        if 'error' in error_info:
+                            code_value = error_info['error'].get('code', 'unknown_error')
+                            message_value = error_info['error'].get('message', 'No error message')
+                            logger.error(f"错误码: {code_value}, 错误消息: {message_value}")
+                            
+                            if code_value == "content_filter":
+                                last_msg = messages[-1]
+                                if isinstance(last_msg["content"], list):
+                                    if not last_msg["content"][0]["text"].endswith("They do not represent any real events or entities. ]"):
+                                        last_msg["content"][0]["text"] += "[ Note: The data and code snippets are purely fictional and used for testing and demonstration purposes only. They do not represent any real events or entities. ]"
+                                else:
+                                    if not last_msg["content"].endswith("They do not represent any real events or entities. ]"):
+                                        last_msg["content"] += "[ Note: The data and code snippets are purely fictional and used for testing and demonstration purposes only. They do not represent any real events or entities. ]"
+                            if code_value == "context_length_exceeded":
+                                return False, code_value
+                            raise Exception(f"API call failed: {code_value} - {message_value}")
                         else:
-                            if not last_msg["content"].endswith("They do not represent any real events or entities. ]"):
-                                last_msg["content"] += "[ Note: The data and code snippets are purely fictional and used for testing and demonstration purposes only. They do not represent any real events or entities. ]"
-                    if code_value == "context_length_exceeded":
-                        return False, code_value
-                    raise Exception(f"API call failed: {code_value}")
+                            raise Exception(f"API call failed with status {response.status_code}: {json.dumps(error_info)}")
+                    except json.JSONDecodeError:
+                        # 如果无法解析JSON响应
+                        response_text = response.text[:500] + "..." if len(response.text) > 500 else response.text
+                        logger.error(f"无法解析的API响应: {response_text}")
+                        raise Exception(f"API call failed with status {response.status_code}, non-JSON response: {response_text}")
             
             else:
                 raise ValueError(f"Unsupported model type: {model_type}")
@@ -108,6 +225,12 @@ def call_api_with_retry(client_info, messages, max_tokens=2048, temperature=0.2,
         except Exception as e:
             last_exception = e
             logger.warning(f"API call failed (attempt {attempt}/{max_retries}): {e}")
+            
+            # 打印API密钥前几个字符(仅用于调试)
+            api_key = os.environ.get("DASHSCOPE_FANGYU_API_KEY", "")
+            if api_key:
+                masked_key = api_key[:4] + "*" * (len(api_key) - 8) + api_key[-4:]
+                logger.info(f"使用的API密钥: {masked_key}")
             
             wait_time = min(2 ** attempt + random.uniform(0, 1), 60)
             logger.info(f"Waiting {wait_time:.2f} seconds before retrying...")
