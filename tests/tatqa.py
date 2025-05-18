@@ -12,7 +12,7 @@ from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 from tqdm import tqdm
 
-from prompt import COT_PROMPT_TATQA_TEMPLATE
+
 
 # Setup logging
 def setup_logger(log_file):
@@ -42,7 +42,7 @@ class VLLMGenerator:
     A class for generating text using vLLM with support for different models.  
     """  
     
-    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+    def __init__(self, model_path, max_model_len=16384, tensor_parallel_size=1):  
         """  
         Initialize the VLLMGenerator with model and tokenizer.  
         """  
@@ -96,7 +96,7 @@ class VLLMGenerator:
             print(f"Error in vLLM generation: {str(e)}")  
             raise  
 
-def create_prompt_from_tatqa(item, question_item):
+def create_prompt_from_tatqa(item, question_item, is_think):
     """Create prompt from TaTQA data item"""
     # Process table
     table_data = item["table"]["table"]
@@ -111,12 +111,22 @@ def create_prompt_from_tatqa(item, question_item):
         text_parts.append(f"Paragraph {i}: {para['text']}")
     text_str = "\n".join(text_parts)
     
-    # Generate prompt
-    prompt = COT_PROMPT_TATQA_TEMPLATE.format(
-        table=table_str, 
-        text=text_str, 
-        question=question_item["question"]
-    )
+    if is_think:
+        from prompt_think import COT_PROMPT_TATQA_TEMPLATE
+        # Generate prompt
+        prompt = COT_PROMPT_TATQA_TEMPLATE.format(
+            table=table_str, 
+            text=text_str, 
+            question=question_item["question"]
+        )
+    else:
+        from prompt import COT_PROMPT_TATQA_TEMPLATE
+        # Generate prompt
+        prompt = COT_PROMPT_TATQA_TEMPLATE.format(
+            table=table_str, 
+            text=text_str, 
+            question=question_item["question"]
+        )
     
     return prompt
 
@@ -170,7 +180,7 @@ def find_gold_answer_with_info(test_data, question_text, table_uid):
     }
 
 def process_tatqa_data_batch(input_file, gold_file, output_file, model_path, log_file, max_tokens=2048, 
-                            temperature=0.0, tensor_parallel_size=1, batch_size=16):
+                            temperature=0.0, tensor_parallel_size=1, batch_size=16, is_think=False):
     """Process TaTQA dataset with batched VLLM inference"""
     logger = setup_logger(log_file)
     
@@ -187,7 +197,7 @@ def process_tatqa_data_batch(input_file, gold_file, output_file, model_path, log
     try:
         generator = VLLMGenerator(
             model_path=model_path,
-            max_model_len=8192,
+            max_model_len=16384,
             tensor_parallel_size=tensor_parallel_size
         )
         logger.info(f"VLLM generator initialized successfully")
@@ -277,7 +287,7 @@ def process_tatqa_data_batch(input_file, gold_file, output_file, model_path, log
         for item in current_batch:
             table_item = item["table_item"]
             question_item = item["question_item"]
-            prompt = create_prompt_from_tatqa(table_item, question_item)
+            prompt = create_prompt_from_tatqa(table_item, question_item, is_think)
             prompts.append(prompt)
         
         # Generate responses for the batch
@@ -400,6 +410,7 @@ def parse_arguments():
     parser.add_argument('--tensor_parallel_size', type=int, default=2, help='Tensor parallelism size')
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for inference')
     parser.add_argument('--base_path', type=str,default='/mnt/usercache/mengjinxiang/Project/SFT_and_Evaluation', help='Base path for the project')
+    parser.add_argument('--think', action='store_true', help='increase output verbosity')
     
     return parser.parse_args()
 
@@ -443,7 +454,8 @@ def main():
         max_tokens=args.max_tokens,
         temperature=args.temperature,
         tensor_parallel_size=args.tensor_parallel_size,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        is_think=args.think
     )
 
 if __name__ == "__main__":

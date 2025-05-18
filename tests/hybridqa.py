@@ -13,7 +13,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 from tqdm import tqdm
-from prompt import COT_PROMPT_HYBRIDQA_TEMPLATE
+
 
 
 # Setup logging
@@ -45,7 +45,7 @@ class VLLMGenerator:
     A class for generating text using vLLM with support for different models.  
     """  
     
-    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+    def __init__(self, model_path, max_model_len=16384, tensor_parallel_size=1):  
         """  
         Initialize the VLLMGenerator with model and tokenizer.  
         """  
@@ -144,20 +144,31 @@ def format_text_for_prompt(link_data):
     return "\n\n".join(result)
 
 
-def create_prompt_from_hybridqa(item):
+def create_prompt_from_hybridqa(item, is_think):
     """Create prompt for a HybridQA item"""
     # Format table
     table_str = format_table_for_prompt(item["table"])
     
     # Format text
     text_str = format_text_for_prompt(item["relevant_links"])
-    
-    # Generate prompt
-    prompt = COT_PROMPT_HYBRIDQA_TEMPLATE.format(
-        table=table_str, 
-        text=text_str, 
-        question=item["question"]
-    )
+
+
+    if is_think:
+        from prompt_think import COT_PROMPT_HYBRIDQA_TEMPLATE
+        # Generate prompt
+        prompt = COT_PROMPT_HYBRIDQA_TEMPLATE.format(
+            table=table_str, 
+            text=text_str, 
+            question=item["question"]
+        )
+    else:
+        from prompt import COT_PROMPT_HYBRIDQA_TEMPLATE
+        # Generate prompt
+        prompt = COT_PROMPT_HYBRIDQA_TEMPLATE.format(
+            table=table_str, 
+            text=text_str, 
+            question=item["question"]
+        )
     
     return prompt
 
@@ -194,7 +205,7 @@ def extract_answer_from_response(model_answer):
 
 
 def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, max_tokens=2048,
-                             temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0):
+                             temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0, is_think=False):
     """Process HybridQA dataset with batched VLLM inference"""
     logger = setup_logger(log_file)
     
@@ -210,7 +221,7 @@ def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, m
     try:
         generator = VLLMGenerator(
             model_path=model_path,
-            max_model_len=8192,
+            max_model_len=16384,
             tensor_parallel_size=tensor_parallel_size
         )
         logger.info(f"VLLM generator initialized successfully")
@@ -272,7 +283,7 @@ def process_hybridqa_data_batch(input_file, output_file, model_path, log_file, m
         # Create prompts for current batch
         prompts = []
         for item in current_batch:
-            prompt = create_prompt_from_hybridqa(item)
+            prompt = create_prompt_from_hybridqa(item, is_think)
             prompts.append(prompt)
         
         # Generate responses for the batch
@@ -396,6 +407,7 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for inference')
     parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
     parser.add_argument('--base_path', type=str, help='Base path for the project')
+    parser.add_argument('--think', action='store_true', help='increase output verbosity')
     
     return parser.parse_args()
 
@@ -451,7 +463,8 @@ def main():
         temperature=temperature,
         tensor_parallel_size=args.tensor_parallel_size,
         batch_size=args.batch_size,
-        start_from=start_from
+        start_from=start_from,
+        is_think=args.think
     )
 
 

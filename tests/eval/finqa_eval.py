@@ -59,9 +59,10 @@ def extract_answer_from_response(model_answer: str) -> str:
     
     # Try to match content wrapped in <answer> tags
     answer_tag_pattern = r'<answer>(.*?)</answer>'
+
     tag_match = re.search(answer_tag_pattern, model_answer, re.DOTALL)
     if tag_match:
-        return tag_match.group(1).strip()
+        model_answer = tag_match.group(1).strip()
     
     # Try to match content after "Answer:"
     answer_pattern = r'Answer:\s*(.*?)(?:(?:\n\s*\n)|(?:\n\s*Used cells:)|$)'
@@ -69,6 +70,7 @@ def extract_answer_from_response(model_answer: str) -> str:
     if match:
         # Extract match content and clean it
         answer_text = match.group(1).strip()
+        answer_text = answer_text.replace('</answer>','').replace('<answer>','').replace('Answer:','')
         return answer_text
     
     # Fallback approaches: try various answer formats
@@ -184,7 +186,7 @@ def process_result_file(results_file: str) -> Dict[str, Dict]:
     """
     with open(results_file, 'r', encoding='utf-8') as f:
         results = json.load(f)
-    
+
     processed_results = {}
     for item in results:
         question_id = item.get("id", "")
@@ -194,6 +196,8 @@ def process_result_file(results_file: str) -> Dict[str, Dict]:
         full_response = item.get("full_response", "")
         # Use model_answer if it exists, otherwise extract from full_response
         model_answer = item.get("model_answer", extract_answer_from_response(full_response))
+        model_answer = model_answer.replace('</answer>','').replace('<answer>','').replace('Answer:','')
+
         gold_answer = item.get("gold_answer", "")
         
         processed_results[question_id] = {
@@ -217,7 +221,7 @@ def evaluate_finqa(results_dict: Dict[str, Dict]) -> Tuple[float, Dict[str, Any]
     correct_count = 0
     total_count = len(results_dict)
     details = []
-    
+
     for qid, item in tqdm(results_dict.items(), desc="Evaluating FinQA results"):
         model_answer = item.get("full_response", "")  # Use full response for evaluation
         gold_answer = item.get("gold_answer", "")

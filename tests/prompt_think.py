@@ -1,95 +1,135 @@
-COT_PROMPT_TEMPLATE = """## Objective
-You are provided with a table and a question related to the table.
-Your task is to answer the question step by step based on the table.
+COT_PROMPT_TEMPLATE = """Based on the table below, please answer the question, the answer should be short and simple. It can be a number, a word, or a phrase in the table, but not a full sentence.
 
-## Table
-{table}
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
-## Question
-{question}
+## Output Format Example
 
-The answer should be short and simple. It can be a number, a word, or a phrase in the table, but not a full sentence.
-Your response should end with `Answer: xxx` (answer to the question).
-Now, answer the question step by step:
-"""
+<think>
+Step-by-step reasoning here...
+</think>
 
+<answer>here is your answer</answer>
 
-
-CODE_COT_PROMPT_TEMPLATE = """
-
-
+#Task:
 
 Table:
 {table}
 
-Question:
-{question}
-
-
-
+Question: {question}
 """
 
 
-COT_PROMPT_WIKISQL_TEMPLATE = """## Objective
-You are provided with a table and a question related to the table.
-Please generate a SQL query to answer this question. You should think step-by-step to reach the final answer.
-
-## Table
+COT_PROMPT_WIKISQL_TEMPLATE = """Given the following table:
 {table}
+Answer the question: {question}.
 
-## Question
-{question}
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final SQL answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
-Your SQL query in the format ```sql YOUR SQL QUERY```
-Your response should end with `Answer: xxx` (answer to the question).
-## For example:
-Answer: ```sql SELECT Player FROM table WHERE No. = 42```
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer> SELECT Name FROM table WHERE Age > 30 </answer>
 """
 
 
-COT_PROMPT_TATQA_TEMPLATE = """Below is an instruction that describes a question answering task in the finance domain, provided with an input table and relevant text as context. 
+COT_PROMPT_TATQA_TEMPLATE = """<|im_start|>system
+You are a helpful assistant. You first think about the reasoning process in your mind and then provide the user with the answer.
+<|im_end|>
+<|im_start|>user
+Below is an instruction that describes a question answering task in the finance domain, provided with an input table and relevant text as context.
 Please answer the given question based on the table and text.
 ### Instruction
 Given a table and a list of texts in the following, what is the answer to the question?
+### Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 ### Table:
 {table}
 ### Text:
 {text}
 ### Question:
 {question}
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
-Now, answer the question step by step:
+
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>Lake Palas Tuzla</answer>
+
+<|im_end|>
+<|im_start|>assistant
+Let me solve this step by step.
+<think>
 """
 
 
-COT_PROMPT_HYBRIDQA_TEMPLATE = """Please answer the given question based on the table and text. You should reach a short-form answer after reasoning.
-### Instruction
-Given a table and a list of texts in the following, what is the answer to the question?
+COT_PROMPT_HYBRIDQA_TEMPLATE = """<|im_start|>system
+You are a helpful assistant. You first think about the reasoning process in your mind and then provide the user with the answer.
+<|im_end|>
+<|im_start|>user
+Please answer the given question based on the table and text. You should reach a short-form answer after reasoning.
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
+
 ### Table:
 {table}
-### Text:
+
+### Related Text Information:
 {text}
+
 ### Question:
 {question}
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
-Now, answer the question step by step:
+
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>Lake Palas Tuzla</answer>
+
+<|im_end|>
+<|im_start|>assistant
+Let me solve this step by step.
+<think>
 """
 
 COT_PROMPT_TABFACT_TEMPLATE = """
-## Task:
+Task:
 You will predict the claim's label based on the given claim and table. There are 2 possible labels: SUPPORTS, REFUTES. SUPPORTS means the claim is supported by the table. REFUTES means the claim is refuted by the table.
-You should think step-by-step to reach the final answer.
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
-### Table:
+Table:
 {table}
 
-###  Claim:
+Claim:
 {claim}
 
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>SUPPORTS</answer>
 """
 
 
@@ -106,8 +146,12 @@ Please only output the results without any other words in the format of: {{"Answ
 """
 
 COT_PROMPT_MULTHIERTT_TEMPLATE = """
-"You are an expert at multi-table question answering, you need to extract answers based on the given multi-hop question, tables and text.
-You should think step-by-step to reach the final answer.
+Task:
+You are an expert at multi-table question answering, you need to extract answers based on the given multi-hop question, tables and text.
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
 ## The question:
 {question}
@@ -118,10 +162,46 @@ You should think step-by-step to reach the final answer.
 ## Text:
 {text}
 
-## Response
-Your response should end with `Answer: xxx` (answer to the question).
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>Lake Palas Tuzla</answer>
 """
 
+COT_PROMPT_FINQA_TEMPLATE = """Below is an task that describes a question answering task in the finance domain, provided with an input table and relevant text as context. 
+Please answer the given question based on the table and text.
+
+## Task:
+Given a table and a list of texts in the following, what is the answer to the question?
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
+
+### pre_text:
+{pre_text}
+
+### Table:
+{table}
+
+### post_text:
+{post_text}
+
+### Question:
+{question}
+
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>96.7</answer>
+"""
 
 COT_PROMPT_SCITAB_TEMPLATE = """
 ## Task:
@@ -138,9 +218,41 @@ You should think step-by-step to reach the final answer.
 Your response should end with `Answer: xxx` (answer to the question).
 """
 
+COT_PROMPT_OTTQA_TEMPLATE = """Please answer the given question based on the table and text. You should reach a short-form answer after reasoning.
+### Task:
+Given a table and a list of texts in the following, what is the answer to the question?
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
-COT_PROMPT_HITAB_TEMPLATE = """You are capable of effectively identifying the hierarchical structure of the table. Based on the provided table and textual description, please provide the answer to the question.
-You should think step-by-step to reach the final answer.
+### Table:
+{table}
+
+### Text:
+{text}
+
+### Question:
+{question}
+
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>96.7</answer>
+"""
+
+
+COT_PROMPT_HITAB_TEMPLATE = """
+Task:
+You are capable of effectively identifying the hierarchical structure of the table. Based on the provided table, please provide the answer to the question.
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
 ## Table:
 {table}
@@ -148,14 +260,24 @@ You should think step-by-step to reach the final answer.
 ## Question:
 {question}
 
-## Response
-Your response should end with `Answer: xxx` (answer to the question).
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>Paris</answer>
 """
 
 
-COT_PROMPT_FEVEROUS_TEMPLATE = """## Task:
+COT_PROMPT_FEVEROUS_TEMPLATE = """
+Task:
 You will predict the claim's label based on the given claim and table (text). There are 3 possible labels: SUPPORTS, REFUTES, and NOT ENOUGH INFO. SUPPORTS means the claim is supported by the table or text. REFUTES means the claim is refuted by the table or text. NOT ENOUGH INFO means the table (text) does not provide enough information to make the decision.
-You should think step-by-step to reach the final answer.
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
 ## Table:
 {table}
@@ -166,8 +288,13 @@ You should think step-by-step to reach the final answer.
 ## Claim:
 {claim}
 
-## Response
-Your response should end with `Answer: xxx` (answer to the question).
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>SUPPORTS</answer>
 """
 
 
@@ -178,10 +305,15 @@ The table has some highlighted cells. These cells are wrapped with <hl> and </hl
 Your job is to use the table and the context to produce a sentence.
 The sentence must have the following characteristics:
 - it must be structured in a way that allows the reader to understand it without seeing the table
-- it can’t contain lists
+- it can't contain lists
 - it must be only a single sentence long
 - it should focus on the content of the highlighted cells wrapped with <hl> and </hl> tags
 - it must not explicitly mention that some cells are highlighted
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
 ## TABLE:
 {table}
@@ -191,8 +323,13 @@ page title: {page_title}
 section title: {section_title}
 section text: {section_text} 
 
-## Response
-Your response should end with `Answer: xxx` (the final sentence).
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>Daniel Henry Chamberlain was the 76th Governor of South Carolina from 1874.</answer>
 """
 
 
@@ -203,10 +340,15 @@ The table has some highlighted cells. These cells are wrapped with <hl> and </hl
 Your task is to answer the question based on the table and the text content, and the answer should be a single sentence.
 The sentence must have the following characteristics:
 - it must be able to answer what the question asks
-- it can’t contain lists
+- it can't contain lists
 - it must be only a single sentence long
 - it should focus on the content of the highlighted cells wrapped with <hl> and </hl> tags
 - it must not explicitly mention that some cells are highlighted
+
+## Notes:
+- Output the reasoning process inside a single pair of <think>...</think> tags.
+- Output the final answer inside <answer>...</answer> tags.
+- Think through your reasoning process carefully, solve Question step by step.
 
 ## TABLE:
 {table}
@@ -218,8 +360,13 @@ section title: {section_title}
 ## Question:
 {question}
 
-## Response
-Your response should end with `Answer: xxx` (the final sentence).
+## Output Format Example
+
+<think>
+Step-by-step reasoning here...
+</think>
+
+<answer>Daniel Henry Chamberlain was the 76th Governor of South Carolina from 1874.</answer>
 """
 
 
@@ -392,56 +539,4 @@ Question: {question}
 {memory}
 
 
-"""
-
-
-
-
-
-
-COT_PROMPT_FINQA_TEMPLATE = """Below is an instruction that describes a question answering task in the finance domain, provided with an input table and relevant text as context. 
-Please answer the given question based on the table and text.
-
-### Instruction
-Given a table and a list of texts in the following, what is the answer to the question?
-You should think step-by-step to reach the final answer.
-
-### pre_text:
-{pre_text}
-### Table:
-{table}
-### post_text:
-{post_text}
-### Question:
-{question}
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
-"""
-
-COT_PROMPT_SCITAB_TEMPLATE = """
-## Task:
-You will predict the claim's label based on the given claim and table. There are 2 possible labels: SUPPORTS, REFUTES. SUPPORTS means the claim is supported by the table. REFUTES means the claim is refuted by the table.
-You should think step-by-step to reach the final answer.
-
-### Table:
-{table}
-
-###  Claim:
-{claim}
-
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
-"""
-
-COT_PROMPT_OTTQA_TEMPLATE = """Please answer the given question based on the table and text. You should reach a short-form answer after reasoning.
-Given a table and a list of texts in the following, what is the answer to the question?
-You should think step-by-step to reach the final answer.
-### Table:
-{table}
-### Text:
-{text}
-### Question:
-{question}
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
 """

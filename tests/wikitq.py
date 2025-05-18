@@ -1,9 +1,285 @@
 
+# import json
+# import os
+# import logging
+# import time
+# import random
+# import sys
+# import argparse
+# from datetime import datetime
+# from openai import OpenAI
+# from prompt import COT_PROMPT_TEMPLATE
+# from llm import initialize_client, call_api_with_retry  # type: ignore
+
+# # 设置日志
+# def setup_logger(log_file):
+#     """Set up the logger"""
+#     os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
+#     logger = logging.getLogger('table_qa_processor')
+#     logger.setLevel(logging.INFO)
+    
+#     file_handler = logging.FileHandler(log_file, encoding='utf-8')
+#     file_handler.setLevel(logging.INFO)
+    
+#     console_handler = logging.StreamHandler()
+#     console_handler.setLevel(logging.INFO)
+    
+#     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+#     file_handler.setFormatter(formatter)
+#     console_handler.setFormatter(formatter)
+    
+#     logger.addHandler(file_handler)
+#     logger.addHandler(console_handler)
+    
+#     return logger
+
+# def create_prompt_from_wikitq(item):
+#     table_str = ""
+#     if "table" in item:
+#         # 创建表格的字符串表示
+#         for row in item["table"]:
+#             table_str += " | ".join([str(cell) for cell in row]) + "\n"
+    
+#     prompt = COT_PROMPT_TEMPLATE.format(table=table_str, question=item["question"])
+    
+#     return prompt
+
+# def process_table_qa_data(input_file, output_file, model_name, log_file, max_tokens=2048, start_from=0, api_port=8000, temperature=0.0):
+#     logger = setup_logger(log_file)
+    
+#     # 记录开始时间
+#     start_time = time.time()
+#     logger.info(f"Started processing table QA data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+#     logger.info(f"Input file: {input_file}")
+#     logger.info(f"Output file: {output_file}")
+#     logger.info(f"Using model: {model_name}")
+#     logger.info(f"API port: {api_port}")
+#     logger.info(f"Starting from index {start_from}")
+    
+#     # 初始化模型客户端
+#     try:
+#         client_info = initialize_client({"model_path": model_name, "api_port": api_port})
+#         logger.info(f"Model client initialized successfully, type: {client_info['model_type']}")
+#     except Exception as e:
+#         logger.error(f"Model client initialization failed: {e}")
+#         return
+    
+#     # 读取JSONL文件
+#     data_items = []
+#     try:
+#         with open(input_file, 'r', encoding='utf-8') as f:
+#             for line in f:
+#                 if line.strip():
+#                     data_items.append(json.loads(line))
+#         logger.info(f"Loaded {len(data_items)} data items")
+#     except Exception as e:
+#         logger.error(f"Failed to read input file: {e}")
+#         return
+    
+#     # 检查是否存在中间结果，如果有则加载
+#     results = []
+#     if start_from > 0 and os.path.exists(f"{output_file}.temp"):
+#         try:
+#             with open(f"{output_file}.temp", 'r', encoding='utf-8') as f:
+#                 results = json.load(f)
+#             logger.info(f"Loaded intermediate results, containing {len(results)} records")
+#         except Exception as e:
+#             logger.error(f"Failed to load intermediate results: {e}, starting from scratch")
+#             start_from = 0
+    
+#     success_count = len(results)
+#     error_count = 0
+    
+#     # 处理每个数据项
+#     for i, item in enumerate(data_items[start_from:], start=start_from):
+#         item_id = item.get("id", f"item-{i}")
+#         logger.info(f"Processing data item {i+1}/{len(data_items)}... [ID: {item_id}]")
+        
+#         # 创建针对WikiTableQuestion的提示
+#         prompt = create_prompt_from_wikitq(item)
+        
+#         # 提取数据项中的prompt作为用户消息
+#         messages = [{"role": "user", "content": prompt}]
+        
+#         try:
+#             # 记录API调用开始时间
+#             call_start = time.time()
+            
+#             # 调用API
+#             api_result = call_api_with_retry(
+#                 client_info=client_info,
+#                 messages=messages,
+#                 max_tokens=max_tokens,
+#                 temperature=temperature,
+#                 top_p=1.0,
+#                 max_retries=10
+#             )
+            
+#             # 初始化thinking变量，避免未定义错误
+#             thinking = None
+            
+#             # 处理API结果 - 检查是否是deepseek-r1模型
+#             if client_info["model_type"] in ["deepseek-r1", "deepseek-r1-inner"]:
+#                 # deepseek-r1返回结果包含三个值：成功标志、回答内容和推理内容
+#                 success, answer, thinking = api_result
+#             else:
+#                 # 其他模型返回两个值：成功标志和回答内容
+#                 success, answer = api_result
+
+#             if not success:
+#                 raise Exception(f"API调用失败: {answer}")
+            
+#             # 计算API调用时间
+#             call_time = time.time() - call_start
+            
+#             # 处理返回的响应 - 提取token使用情况
+#             token_info = {}
+#             if client_info["model_type"] == "openai" and hasattr(answer, 'usage'):
+#                 token_info = {
+#                     "completion_tokens": getattr(answer.usage, 'completion_tokens', 'N/A'),
+#                     "prompt_tokens": getattr(answer.usage, 'prompt_tokens', 'N/A'),
+#                     "total_tokens": getattr(answer.usage, 'total_tokens', 'N/A')
+#                 }
+#                 # 提取回答内容
+#                 answer = answer.choices[0].message.content
+#             else:
+#                 token_info = {"note": "Token usage not available for this model type"}
+            
+#             # 构建结果对象
+#             result = {
+#                 "id": item_id,
+#                 "source": item.get("source", {}),
+#                 "prompt": prompt,
+#                 "question": item["question"],
+#                 "answer": item["answer"],
+#                 "model_answer": answer,
+#                 "processing_time": call_time,
+#                 "token_usage": token_info
+#             }
+            
+#             # 添加思考内容字段（针对deepseek-r1模型）
+#             if thinking is not None:
+#                 result["think"] = thinking
+#                 logger.info(f"Model thinking: {thinking}")
+            
+#             results.append(result)
+#             success_count += 1
+            
+#             # 记录详细日志
+#             logger.info(f"Question: {item['question']}")
+#             logger.info(f"Golden answer: {item['answer']}")
+#             logger.info(f"Model answer: {answer}")
+#             logger.info(f"Processing time: {call_time:.2f} seconds")
+#             logger.info(f"Token usage: {token_info}")
+#             logger.info("-" * 50)
+            
+#         except Exception as e:
+#             error_count += 1
+#             logger.error(f"Error processing data item {i+1}: {e}")
+#             # 记录错误信息
+#             result = {
+#                 "id": item_id,
+#                 "source": item.get("source", {}),
+#                 "question": item["question"],
+#                 "answer": item["answer"],
+#                 "model_answer": f"Processing error: {str(e)}",
+#                 "error": str(e)
+#             }
+#             results.append(result)
+        
+#         # 每处理5个数据项或出错时保存中间结果
+#         if (i + 1) % 5 == 0 or error_count > 0:
+#             try:
+#                 with open(f"{output_file}.temp", 'w', encoding='utf-8') as f:
+#                     json.dump(results, f, ensure_ascii=False, indent=2)
+#                 logger.info(f"Saved intermediate results ({i+1}/{len(data_items)})")
+#             except Exception as e:
+#                 logger.error(f"Failed to save intermediate results: {e}")
+    
+#     # 将结果保存到JSON文件
+#     try:
+#         with open(output_file, 'w', encoding='utf-8') as f:
+#             json.dump(results, f, ensure_ascii=False, indent=2)
+#         logger.info(f"Results saved to {output_file}")
+#     except Exception as e:
+#         logger.error(f"Failed to save results file: {e}")
+
+#     # 记录总结信息
+#     total_time = time.time() - start_time
+#     logger.info("=" * 60)
+#     logger.info(f"Processing complete! Total time: {total_time:.2f} seconds")
+#     logger.info(f"Successfully processed: {success_count}/{len(data_items)}")
+#     logger.info(f"Failed to process: {error_count}/{len(data_items)}")
+#     if len(data_items) > 0:
+#         logger.info(f"Success rate: {success_count/len(data_items)*100:.2f}%")
+#     logger.info("=" * 60)
+
+# def parse_arguments():
+#     parser = argparse.ArgumentParser(description='Process WikiTableQuestions dataset with LLM')
+    
+#     parser.add_argument('--api_port', type=int, default=8000, help='API port for local model server')
+#     parser.add_argument('--output_file', type=str, help='Path to save results')
+#     parser.add_argument('--model_path', type=str, help='Model path or identifier')
+#     parser.add_argument('--log_file', type=str, help='Path to log file')
+#     parser.add_argument('--temperature', type=float, default=0.0, help='Temperature for model generation')
+#     parser.add_argument('--max_tokens', type=int, default=4096, help='Maximum tokens for model output')
+#     parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
+#     parser.add_argument('--base_path', type=str, help='Base path for the project')
+    
+#     return parser.parse_args()
+
+
+# def main():
+#     # 解析命令行参数
+#     args = parse_arguments()
+    
+#     # 处理 base_path
+#     if args.base_path and os.path.exists(args.base_path):
+#         base_path = args.base_path
+    
+#     if not base_path:
+#         print("Error: Unable to find project root directory")
+#         exit(1)
+    
+#     print(f"Using root path: {base_path}")
+    
+#     # 设置文件路径
+#     input_file = os.path.join(base_path, "data/wikitq/test.jsonl")
+    
+#     # 使用命令行参数，如果提供了参数则使用参数值，否则使用默认值
+#     output_file = args.output_file
+#     model_name = args.model_path
+#     log_file = args.log_file
+    
+#     # 使用命令行参数的最大token数
+#     max_tokens = args.max_tokens
+    
+#     # 使用命令行参数的起始索引
+#     start_from = args.start_from
+    
+#     # 使用命令行参数的温度值
+#     temperature = args.temperature
+    
+#     # 使用命令行参数的API端口
+#     api_port = args.api_port
+    
+#     # 确保输出目录和日志目录存在
+#     os.makedirs(os.path.dirname(output_file), exist_ok=True)
+#     os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
+#     # 处理数据
+#     process_table_qa_data(input_file, output_file, model_name, log_file, max_tokens, start_from, api_port, temperature)
+
+
+# if __name__ == "__main__":
+#     main()
+
+
 import json
 import os
 import logging
 import time
-import re
 import sys
 import argparse
 from datetime import datetime
@@ -11,7 +287,7 @@ from typing import Dict, Any, List, Tuple, Optional
 from vllm import LLM, SamplingParams
 from transformers import AutoTokenizer
 from tqdm import tqdm
-from prompt import COT_PROMPT_TEMPLATE
+
 
 
 # Setup logging
@@ -43,7 +319,7 @@ class VLLMGenerator:
     A class for generating text using vLLM with support for different models.  
     """  
     
-    def __init__(self, model_path, max_model_len=8192, tensor_parallel_size=1):  
+    def __init__(self, model_path, max_model_len=16384, tensor_parallel_size=1):  
         """  
         Initialize the VLLMGenerator with model and tokenizer.  
         """  
@@ -96,41 +372,144 @@ class VLLMGenerator:
         except Exception as e:  
             print(f"Error in vLLM generation: {str(e)}")  
             raise
-        
-def extract_answer_from_response(model_answer):
-    """Extract answer from model's response"""
-    if not model_answer:
-        return None
-    
-    # Try to match content wrapped in <answer> tags
-    answer_tag_pattern = r'<answer>(.*?)</answer>'
-    answer_tag_match = re.search(answer_tag_pattern, model_answer, re.DOTALL)
-    if answer_tag_match:
-        return answer_tag_match.group(1).strip()
-    
-    # Try to match content after "Answer:" or similar
-    match = re.search(r'Answer:\s*(.+?)(?:\n|$|\.|")', model_answer, re.IGNORECASE)
-    if match:
-        return match.group(1).strip()
-    
-    # If no specific answer format is found, return the whole response
-    return model_answer.strip() if model_answer else None
 
-def create_prompt_from_wikitq(item):
-    """Create prompt for WikiTableQuestion item"""
+# def create_prompt_from_wikitq(item,is_think):
+#     """Create prompt for WikiTableQuestion item"""
+#     table_str = ""
+#     if "table" in item:
+#         # 创建表格的字符串表示
+#         for row in item["table"]:
+#             table_str += " | ".join([str(cell) for cell in row]) + "\n"
+
+#     if is_think:
+#         from prompt_think import COT_PROMPT_TEMPLATE
+#         prompt = COT_PROMPT_TEMPLATE.format(table=table_str, question=item["question"])
+#     else:
+#         from prompt import COT_PROMPT_TEMPLATE
+#         prompt = COT_PROMPT_TEMPLATE.format(table=table_str, question=item["question"])
+
+#     return prompt
+
+
+def create_prompt_from_wikitq(item, is_think=False, table_format="markdown", perturbation="none"):
+    """
+    Create prompt for WikiTableQuestion item with different table formats and perturbations
+    
+    Args:
+        item: The input item containing table and question
+        is_think: Whether to use thinking prompt template
+        table_format: Format for table representation - "markdown", "csv", or "dataframe"
+        perturbation: Type of table perturbation - "none", "row_shuffle", "col_shuffle", "both_shuffle"
+    
+    Returns:
+        Formatted prompt string
+    """
     table_str = ""
     if "table" in item:
-        # 创建表格的字符串表示
-        for row in item["table"]:
-            table_str += " | ".join([str(cell) for cell in row]) + "\n"
-    
-    prompt = COT_PROMPT_TEMPLATE.format(table=table_str, question=item["question"])
-    
+        # 深拷贝表格数据以避免修改原始数据
+        import copy
+        import random
+        
+        table = copy.deepcopy(item["table"])
+        
+        # 获取表头和数据行
+        header = table[0] if len(table) > 0 else []
+        data_rows = table[1:] if len(table) > 1 else []
+        
+        # 应用扰动
+        row_shuffle = perturbation in ["row_shuffle", "both_shuffle"]
+        col_shuffle = perturbation in ["col_shuffle", "both_shuffle"]
+        
+        # 应用列扰动
+        if col_shuffle and len(header) > 1:
+            # 生成新的列顺序
+            col_indices = list(range(len(header)))
+            random.shuffle(col_indices)
+            
+            # 重排表头和数据行
+            header = [header[i] for i in col_indices]
+            data_rows = [[row[i] if i < len(row) else "" for i in col_indices] for row in data_rows]
+            
+        # 应用行扰动
+        if row_shuffle and len(data_rows) > 1:
+            # 保持表头不变，随机打乱数据行
+            random.shuffle(data_rows)
+        
+        # 重新组合表格
+        shuffled_table = [header] + data_rows
+        
+        # 根据选择的格式生成表格字符串
+        if table_format == "markdown":
+            # 创建Markdown格式的表格字符串表示
+            for row in shuffled_table:
+                table_str += " | ".join([str(cell) for cell in row]) + "\n"
+        
+        elif table_format == "csv":
+            # 创建CSV格式的表格字符串表示
+            for row in shuffled_table:
+                table_str += ",".join([f'"{str(cell)}"' for cell in row]) + "\n"
+        
+        elif table_format == "dataframe":
+            # 导入pandas库
+            import pandas as pd
+            
+            # 创建类似DataFrame的表格表示
+            if len(shuffled_table) > 0:
+                # 获取表头和数据
+                headers = shuffled_table[0]
+                data = shuffled_table[1:] if len(shuffled_table) > 1 else []
+                
+                # 创建pandas DataFrame
+                df = pd.DataFrame(data, columns=headers)
+                
+                # 配置pandas显示选项以显示完整表格
+                pd.set_option('display.expand_frame_repr', False)
+                pd.set_option('display.width', 500000)
+                pd.set_option('display.max_rows', None)
+                pd.set_option('display.max_columns', None)
+                pd.set_option('display.max_colwidth', None)
+                
+                # 将DataFrame转换为字符串
+                table_str = df.to_string(index=True)
+                
+                # 添加DataFrame信息行
+                table_str += f"\n\n[{len(data)} rows x {len(headers)} columns]\n"
+
+                pd.reset_option('display.expand_frame_repr')
+                pd.reset_option('display.width')
+                pd.reset_option('display.max_rows')
+                pd.reset_option('display.max_columns')
+                pd.reset_option('display.max_colwidth')
+        
+        else:
+            # 默认使用Markdown格式
+            for row in shuffled_table:
+                table_str += " | ".join([str(cell) for cell in row]) + "\n"
+                
+        # 如果应用了扰动，添加注释说明
+        if perturbation != "none" and not is_think:  # 在非思考模式下添加注释
+            notes = []
+            if row_shuffle:
+                notes.append("Row order has been randomly shuffled (except header)")
+            if col_shuffle:
+                notes.append("Column order has been randomly shuffled")
+            
+            if notes:
+                table_str += "\nNote: " + ", ".join(notes) + "\n"
+
+    # 根据是否需要思考使用不同的模板
+    if is_think:
+        from prompt_think import COT_PROMPT_TEMPLATE
+        prompt = COT_PROMPT_TEMPLATE.format(table=table_str, question=item["question"])
+    else:
+        from prompt import COT_PROMPT_TEMPLATE
+        prompt = COT_PROMPT_TEMPLATE.format(table=table_str, question=item["question"])
+
     return prompt
 
 
 def process_table_qa_data_batch(input_file, output_file, model_path, log_file, max_tokens=2048,
-                           temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0):
+                           temperature=0.0, tensor_parallel_size=1, batch_size=16, start_from=0, is_think=False, table_format="markdown", perturbation="none"):
     """Process WikiTableQuestions dataset with batched VLLM inference"""
     logger = setup_logger(log_file)
     
@@ -146,7 +525,7 @@ def process_table_qa_data_batch(input_file, output_file, model_path, log_file, m
     try:
         generator = VLLMGenerator(
             model_path=model_path,
-            max_model_len=8192,
+            max_model_len=16384,
             tensor_parallel_size=tensor_parallel_size
         )
         logger.info(f"VLLM generator initialized successfully")
@@ -207,9 +586,8 @@ def process_table_qa_data_batch(input_file, output_file, model_path, log_file, m
         # 为当前批次创建提示
         prompts = []
         for item in current_batch:
-            prompt = create_prompt_from_wikitq(item)
+            prompt = create_prompt_from_wikitq(item, is_think,table_format=table_format, perturbation=perturbation)
             prompts.append(prompt)
-        
         # 为批次生成回答
         try:
             batch_start_time = time.time()
@@ -236,9 +614,6 @@ def process_table_qa_data_batch(input_file, output_file, model_path, log_file, m
                 global_item_index = batch_start + i + 1
                 
                 logger.info(f"Processing item {global_item_index}/{len(remaining_items)}... [ID: {item_id}]")
-
-                # 从模型回答中提取最终答案
-                extracted_answer = extract_answer_from_response(response)
                 
                 # 计算处理时间
                 item_time = time.time() - item_start_time
@@ -246,7 +621,7 @@ def process_table_qa_data_batch(input_file, output_file, model_path, log_file, m
                 # 记录详细信息
                 logger.info(f"Question: {question}")
                 logger.info(f"Golden answer: {item['answer']}")
-                logger.info(f"Model answer: {extracted_answer}")
+                logger.info(f"Model answer: {response}")
                 logger.info(f"Processing time: {item_time:.6f} seconds")
                 logger.info("-" * 50)
                 
@@ -258,7 +633,6 @@ def process_table_qa_data_batch(input_file, output_file, model_path, log_file, m
                     "question": question,
                     "answer": item["answer"],
                     "model_answer": response,
-                    "extracted_answer": extracted_answer, # 新增字段：提取的答案
                     "processing_time": item_time
                 }
                 
@@ -315,6 +689,16 @@ def parse_arguments():
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for inference')
     parser.add_argument('--start_from', type=int, default=0, help='Start processing from this index')
     parser.add_argument('--base_path', type=str, help='Base path for the project')
+    parser.add_argument('--think', action='store_true', help='increase output verbosity')
+    # 表格格式参数
+    parser.add_argument('--table_format', type=str, default="markdown", 
+                        choices=["markdown", "csv", "dataframe"],
+                        help='Format for table representation in prompts')
+    
+    # 表格扰动参数 
+    parser.add_argument('--perturbation', type=str, default="none", 
+                        choices=["none", "row_shuffle", "col_shuffle", "both_shuffle"],
+                        help='Type of table perturbation to apply')
     
     return parser.parse_args()
 
@@ -370,7 +754,10 @@ def main():
         temperature=temperature,
         tensor_parallel_size=args.tensor_parallel_size,
         batch_size=args.batch_size,
-        start_from=start_from
+        start_from=start_from,
+        is_think=args.think,
+        table_format=args.table_format,
+        perturbation=args.perturbation
     )
 
 

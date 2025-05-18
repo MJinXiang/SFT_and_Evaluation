@@ -1,4 +1,3 @@
-
 import json
 import re
 import os
@@ -15,20 +14,16 @@ def extract_predicted_answer(model_answer):
     # Try to match content wrapped in <answer> tags
     answer_tag_pattern = r'<answer>(.*?)</answer>'
     answer_tag_match = re.search(answer_tag_pattern, model_answer, re.DOTALL)
-
     if answer_tag_match:
-        model_answer = answer_tag_match.group(1).strip()  
-        if 'Answer:' in model_answer:
-            match = re.search(r'Answer:\s*(.+?)(?:\n|$|\.|")', model_answer)
-            if match:
-                return match.group(1).strip()
-        else:
-            return model_answer.strip() if model_answer else None
-    else:
-        match = re.search(r'Answer:\s*(.+?)(?:\n|$|\.|")', model_answer)
-        if match:
-            return match.group(1).strip()
+        model_answer = answer_tag_match.group(1).strip()
     
+    # Try to match content after "Answer:" or similar
+    match = re.search(r'Answer:\s*(.+?)(?:\n|$|\.|")', model_answer, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    
+    # If no specific answer format is found, return the whole response
+    return model_answer.strip() if model_answer else None
 
 
 def normalize_answer(answer):

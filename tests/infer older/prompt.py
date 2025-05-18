@@ -14,22 +14,6 @@ Now, answer the question step by step:
 """
 
 
-
-CODE_COT_PROMPT_TEMPLATE = """
-
-
-
-Table:
-{table}
-
-Question:
-{question}
-
-
-
-"""
-
-
 COT_PROMPT_WIKISQL_TEMPLATE = """## Objective
 You are provided with a table and a question related to the table.
 Please generate a SQL query to answer this question. You should think step-by-step to reach the final answer.
@@ -392,56 +376,4 @@ Question: {question}
 {memory}
 
 
-"""
-
-
-
-
-
-
-COT_PROMPT_FINQA_TEMPLATE = """Below is an instruction that describes a question answering task in the finance domain, provided with an input table and relevant text as context. 
-Please answer the given question based on the table and text.
-
-### Instruction
-Given a table and a list of texts in the following, what is the answer to the question?
-You should think step-by-step to reach the final answer.
-
-### pre_text:
-{pre_text}
-### Table:
-{table}
-### post_text:
-{post_text}
-### Question:
-{question}
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
-"""
-
-COT_PROMPT_SCITAB_TEMPLATE = """
-## Task:
-You will predict the claim's label based on the given claim and table. There are 2 possible labels: SUPPORTS, REFUTES. SUPPORTS means the claim is supported by the table. REFUTES means the claim is refuted by the table.
-You should think step-by-step to reach the final answer.
-
-### Table:
-{table}
-
-###  Claim:
-{claim}
-
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
-"""
-
-COT_PROMPT_OTTQA_TEMPLATE = """Please answer the given question based on the table and text. You should reach a short-form answer after reasoning.
-Given a table and a list of texts in the following, what is the answer to the question?
-You should think step-by-step to reach the final answer.
-### Table:
-{table}
-### Text:
-{text}
-### Question:
-{question}
-### Response
-Your response should end with `Answer: xxx` (answer to the question).
 """
